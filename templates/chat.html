@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<title>MediAssist — Your Medical AI Companion</title>
+		<meta name="description" content="A private, evidence-guided medical AI chatbot to help you understand symptoms, conditions, and health topics.">
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<meta name="theme-color" content="#f0f4f8">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+		<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css" integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU" crossorigin="anonymous">
+		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+		<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css')}}"/>
+	</head>
+	
+	<body>
+		<div class="app-shell">
+			<!-- Sidebar -->
+			<aside class="sidebar" id="sidebar">
+				<div class="sidebar-brand">
+					<div class="brand-icon">
+						<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+						</svg>
+					</div>
+					<span class="brand-name">MediAssist</span>
+				</div>
+				<nav class="sidebar-nav">
+					<button type="button" id="newChatBtn" class="nav-item active" aria-label="New conversation">
+						<i class="fas fa-plus"></i>
+						<span>New Chat</span>
+					</button>
+				</nav>
+				<div class="sidebar-footer">
+					<div class="safety-note">
+						<i class="fas fa-shield-alt"></i>
+						<span>Your conversations are private and not stored on any server.</span>
+					</div>
+				</div>
+			</aside>
+
+			<!-- Main Chat Area -->
+			<main class="chat-main">
+				<!-- Top Bar -->
+				<header class="chat-topbar">
+					<button type="button" id="menuToggle" class="menu-toggle" aria-label="Toggle sidebar">
+						<i class="fas fa-bars"></i>
+					</button>
+					<div class="topbar-info">
+						<div class="topbar-avatar">
+							<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+							</svg>
+						</div>
+						<div class="topbar-text">
+							<h1>Medical AI Assistant</h1>
+							<p>Evidence-guided · Memory Enabled</p>
+						</div>
+					</div>
+					<div class="topbar-actions">
+						<button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+							<i class="fas fa-moon" id="themeIcon"></i>
+						</button>
+						<button type="button" id="clearChat" class="clear-btn" aria-label="Clear conversation" title="Clear conversation">
+							<i class="fas fa-trash-alt"></i>
+						</button>
+					</div>
+				</header>
+
+				<!-- Messages Area -->
+				<div id="messageFormeight" class="messages-area" role="log" aria-live="polite" aria-relevant="additions text">
+					<!-- Welcome Message -->
+					<div class="welcome-card" id="welcomeCard">
+						<div class="welcome-icon">
+							<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+							</svg>
+						</div>
+						<h2>Welcome to MediAssist</h2>
+						<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
+						<div class="welcome-chips">
+							<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
+								<i class="fas fa-thermometer-half"></i>
+								Cold symptoms
+							</button>
+							<button class="suggestion-chip" data-query="How can I manage a headache?">
+								<i class="fas fa-head-side-cough"></i>
+								Headache tips
+							</button>
+							<button class="suggestion-chip" data-query="What causes high blood pressure?">
+								<i class="fas fa-heartbeat"></i>
+								Blood pressure
+							</button>
+						</div>
+						<p class="welcome-disclaimer">
+							<i class="fas fa-info-circle"></i>
+							This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
+						</p>
+					</div>
+				</div>
+
+				<!-- Input Area -->
+				<div class="input-area">
+					<form id="messageArea" class="message-composer">
+						<label for="text" class="sr-only">Type your message</label>
+						<div class="input-wrapper">
+							<input type="text" id="text" name="msg" placeholder="Ask a health question…" autocomplete="off" required/>
+							<button type="submit" id="send" class="send-btn" aria-label="Send message">
+								<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<line x1="22" y1="2" x2="11" y2="13"></line>
+									<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+								</svg>
+							</button>
+						</div>
+					</form>
+					<p class="input-hint">Press Enter to send · Not a substitute for professional medical advice</p>
+				</div>
+			</main>
+		</div>
+		
+		<script>
+			function escapeHtml(value) {
+				return String(value)
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#39;');
+			}
+
+			function parseMarkdownBold(text) {
+				return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+			}
+
+			function renderBotMessageContent(message) {
+				const normalized = String(message || "").replace(/\r\n/g, "\n").trim();
+				if (!normalized) {
+					return "";
+				}
+
+				const lines = normalized.split("\n");
+				const bulletLines = [];
+				const proseLines = [];
+
+				for (const line of lines) {
+					const trimmed = line.trim();
+					if (!trimmed) {
+						continue;
+					}
+
+					const bulletMatch = trimmed.match(/^(?:[-*]|\u2022)\s+(.*)$/);
+					if (bulletMatch && bulletMatch[1].trim()) {
+						bulletLines.push(bulletMatch[1].trim());
+					} else {
+						proseLines.push(trimmed);
+					}
+				}
+
+				if (bulletLines.length === 0) {
+					return '<p class="bot-text">' + parseMarkdownBold(escapeHtml(normalized)).replace(/\n/g, '<br>') + '</p>';
+				}
+
+				let html = "";
+				if (proseLines.length > 0) {
+					html += '<p class="bot-text">' + parseMarkdownBold(escapeHtml(proseLines.join(" "))) + '</p>';
+				}
+
+				html += '<ul class="bot-list">';
+				for (const item of bulletLines) {
+					html += '<li>' + parseMarkdownBold(escapeHtml(item)) + '</li>';
+				}
+				html += '</ul>';
+				return html;
+			}
+
+			function scrollMessagesToBottom() {
+				const container = document.getElementById("messageFormeight");
+				container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+			}
+
+			function setComposerState(isBusy) {
+				const input = document.getElementById("text");
+				const sendButton = document.getElementById("send");
+				input.disabled = isBusy;
+				sendButton.disabled = isBusy;
+				input.setAttribute("aria-busy", isBusy ? "true" : "false");
+				sendButton.setAttribute("aria-busy", isBusy ? "true" : "false");
+				input.classList.toggle("is-loading", isBusy);
+				sendButton.classList.toggle("is-loading", isBusy);
+			}
+
+			function hideWelcomeCard() {
+				const card = document.getElementById("welcomeCard");
+				if (card) {
+					card.style.opacity = '0';
+					card.style.transform = 'translateY(-10px)';
+					setTimeout(() => card.remove(), 300);
+				}
+			}
+
+			function showTypingIndicator() {
+				if (document.getElementById("typingIndicator")) {
+					return;
+				}
+
+				const typingHtml = `
+					<div id="typingIndicator" class="message-row bot-row typing-row">
+						<div class="message-avatar bot-avatar">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+							</svg>
+						</div>
+						<div class="message-bubble bot-bubble typing-indicator" aria-live="polite" aria-label="Bot is typing">
+							<span class="typing-dot"></span>
+							<span class="typing-dot"></span>
+							<span class="typing-dot"></span>
+						</div>
+					</div>`;
+
+				$("#messageFormeight").append(typingHtml);
+				scrollMessagesToBottom();
+			}
+
+			function hideTypingIndicator() {
+				$("#typingIndicator").remove();
+			}
+
+			function getTimeString() {
+				const date = new Date();
+				return String(date.getHours()).padStart(2, '0') + ":" + String(date.getMinutes()).padStart(2, '0');
+			}
+
+			function sendMessage(messageText) {
+				if (!messageText || !messageText.trim()) return;
+				
+				const str_time = getTimeString();
+				const safeText = escapeHtml(messageText.trim());
+
+				hideWelcomeCard();
+
+				var userHtml = `
+					<div class="message-row user-row">
+						<div class="message-bubble user-bubble">
+							${safeText}
+							<span class="message-time">${str_time}</span>
+						</div>
+					</div>`;
+
+				setComposerState(true);
+				$("#text").val("");
+				$("#messageFormeight").append(userHtml);
+				scrollMessagesToBottom();
+				showTypingIndicator();
+
+				$.ajax({
+					data: { msg: messageText },
+					type: "POST",
+					url: "/get",
+				}).done(function(data) {
+					hideTypingIndicator();
+					var botHtml = `
+						<div class="message-row bot-row">
+							<div class="message-avatar bot-avatar">
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+								</svg>
+							</div>
+							<div class="message-bubble bot-bubble">
+								${renderBotMessageContent(data)}
+								<span class="message-time">${str_time}</span>
+							</div>
+						</div>`;
+					$("#messageFormeight").append($.parseHTML(botHtml));
+					setComposerState(false);
+					scrollMessagesToBottom();
+				}).fail(function() {
+					hideTypingIndicator();
+					var errorHtml = `
+						<div class="message-row bot-row">
+							<div class="message-avatar bot-avatar">
+								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+								</svg>
+							</div>
+							<div class="message-bubble bot-bubble bot-error">
+								I couldn't load a reply just now. Please try again in a moment.
+								<span class="message-time">${str_time}</span>
+							</div>
+						</div>`;
+					$("#messageFormeight").append($.parseHTML(errorHtml));
+					setComposerState(false);
+					scrollMessagesToBottom();
+				});
+			}
+
+			// ── Dark Mode ──────────────────────────────────────
+			function applyTheme(dark) {
+				if (dark) {
+					document.documentElement.setAttribute('data-theme', 'dark');
+					$('#themeIcon').removeClass('fa-moon').addClass('fa-sun');
+				} else {
+					document.documentElement.removeAttribute('data-theme');
+					$('#themeIcon').removeClass('fa-sun').addClass('fa-moon');
+				}
+			}
+
+			// Apply saved preference immediately (before DOM ready)
+			(function() {
+				const saved = localStorage.getItem('mediassist-theme');
+				if (saved === 'dark') {
+					document.documentElement.setAttribute('data-theme', 'dark');
+				}
+			})();
+
+			$(document).ready(function() {
+				// Restore icon state on load
+				const savedTheme = localStorage.getItem('mediassist-theme');
+				applyTheme(savedTheme === 'dark');
+
+				// Toggle handler
+				$("#themeToggle").on("click", function() {
+					const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+					const newTheme = !isDark;
+					applyTheme(newTheme);
+					localStorage.setItem('mediassist-theme', newTheme ? 'dark' : 'light');
+				});
+
+				// Sidebar toggle
+				$("#menuToggle").on("click", function() {
+					$("#sidebar").toggleClass("open");
+				});
+
+				// Close sidebar on outside click (mobile)
+				$(".chat-main").on("click", function() {
+					if (window.innerWidth <= 768) {
+						$("#sidebar").removeClass("open");
+					}
+				});
+
+				// Clear chat
+				$("#clearChat, #newChatBtn").on("click", function() {
+					if ($("#messageFormeight").children().length <= 1 && document.getElementById("welcomeCard")) {
+						return; // Nothing to clear
+					}
+					if (confirm("Start a new conversation?")) {
+						$.ajax({
+							type: "POST",
+							url: "/clear",
+						}).done(function() {
+							$("#messageFormeight").empty();
+							// Re-add welcome card
+							const welcomeHtml = `
+								<div class="welcome-card" id="welcomeCard">
+									<div class="welcome-icon">
+										<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+										</svg>
+									</div>
+									<h2>Welcome to MediAssist</h2>
+									<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
+									<div class="welcome-chips">
+										<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
+											<i class="fas fa-thermometer-half"></i>
+											Cold symptoms
+										</button>
+										<button class="suggestion-chip" data-query="How can I manage a headache?">
+											<i class="fas fa-head-side-cough"></i>
+											Headache tips
+										</button>
+										<button class="suggestion-chip" data-query="What causes high blood pressure?">
+											<i class="fas fa-heartbeat"></i>
+											Blood pressure
+										</button>
+									</div>
+									<p class="welcome-disclaimer">
+										<i class="fas fa-info-circle"></i>
+										This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
+									</p>
+								</div>`;
+							$("#messageFormeight").append(welcomeHtml);
+						}).fail(function() {
+							alert("Failed to clear conversation. Please try again.");
+						});
+					}
+				});
+
+				// Suggestion chips
+				$(document).on("click", ".suggestion-chip", function() {
+					const query = $(this).data("query");
+					if (query) {
+						sendMessage(query);
+					}
+				});
+
+				// Send message
+				$("#messageArea").on("submit", function(event) {
+					event.preventDefault();
+					const rawText = $("#text").val();
+					sendMessage(rawText);
+				});
+			});
+		</script>
+        
+    </body>
+</html>

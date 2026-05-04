@@ -2,13 +2,14 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8">
-		<title>MediAssist — Your Medical AI Companion</title>
-		<meta name="description" content="A private, evidence-guided medical AI chatbot to help you understand symptoms, conditions, and health topics.">
+		<title>MediQuery — Medical AI Assistant</title>
+		<meta name="description" content="Professional medical AI chatbot offering evidence-based health information to educate and inform—never to replace professional medical advice.">
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<meta name="theme-color" content="#f0f4f8">
+		<meta name="theme-color" content="#3d8b7a">
+		<meta name="color-scheme" content="light dark">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css" integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU" crossorigin="anonymous">
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 		<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css')}}"/>
@@ -16,97 +17,93 @@
 	
 	<body>
 		<div class="app-shell">
-			<!-- Sidebar -->
-			<aside class="sidebar" id="sidebar">
+			<aside class="sidebar" id="sidebar" role="navigation" aria-label="Navigation">
 				<div class="sidebar-brand">
-					<div class="brand-icon">
+					<div class="brand-icon" title="MediQuery">
 						<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 						</svg>
 					</div>
-					<span class="brand-name">MediAssist</span>
+					<span class="brand-name">MediQuery</span>
 				</div>
 				<nav class="sidebar-nav">
-					<button type="button" id="newChatBtn" class="nav-item active" aria-label="New conversation">
-						<i class="fas fa-plus"></i>
-						<span>New Chat</span>
+					<button type="button" id="newChatBtn" class="nav-item active" aria-label="Start new conversation" title="Clear conversation and start fresh">
+						<i class="fas fa-plus-circle"></i>
+						<span>New conversation</span>
 					</button>
+					<section class="recent-chats" aria-label="Recent chats">
+						<h3>Recent Chats</h3>
+						<ul class="recent-chat-list" id="recentChats">
+							<!-- Dynamic chat history will be rendered here -->
+						</ul>
+					</section>
 				</nav>
 				<div class="sidebar-footer">
-					<div class="safety-note">
-						<i class="fas fa-shield-alt"></i>
-						<span>Your conversations are private and not stored on any server.</span>
-					</div>
+					<button type="button" class="help-btn" id="helpBtn" aria-label="Help and information" onclick="document.getElementById('helpModal').style.display='flex'">
+						<i class="far fa-life-ring"></i>
+						<span>Help & Info</span>
+					</button>
 				</div>
 			</aside>
 
-			<!-- Main Chat Area -->
-			<main class="chat-main">
-				<!-- Top Bar -->
-				<header class="chat-topbar">
-					<button type="button" id="menuToggle" class="menu-toggle" aria-label="Toggle sidebar">
+			<main class="chat-main" role="main">
+				<header class="chat-topbar" role="banner">
+					<button type="button" id="menuToggle" class="menu-toggle" aria-label="Toggle sidebar menu" aria-expanded="false" title="Toggle navigation">
 						<i class="fas fa-bars"></i>
 					</button>
 					<div class="topbar-info">
-						<div class="topbar-avatar">
-							<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-							</svg>
-						</div>
 						<div class="topbar-text">
 							<h1>Medical AI Assistant</h1>
-							<p>Evidence-guided · Memory Enabled</p>
+							<p>Clinical guidance with trusted retrieval</p>
 						</div>
 					</div>
 					<div class="topbar-actions">
-						<button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+						<button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark/light theme" aria-pressed="false">
 							<i class="fas fa-moon" id="themeIcon"></i>
 						</button>
-						<button type="button" id="clearChat" class="clear-btn" aria-label="Clear conversation" title="Clear conversation">
+						<button type="button" id="clearChat" class="clear-btn" aria-label="Clear conversation history and start fresh" title="Clear all messages" hidden>
 							<i class="fas fa-trash-alt"></i>
 						</button>
 					</div>
 				</header>
 
-				<!-- Messages Area -->
-				<div id="messageFormeight" class="messages-area" role="log" aria-live="polite" aria-relevant="additions text">
-					<!-- Welcome Message -->
-					<div class="welcome-card" id="welcomeCard">
-						<div class="welcome-icon">
+				<!-- Messages Container -->
+				<div id="messagesContainer" class="messages-area" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Chat messages">
+					<div class="welcome-card" id="welcomeCard" role="region" aria-label="Welcome message">
+						<div class="welcome-icon" aria-hidden="true">
 							<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 							</svg>
 						</div>
-						<h2>Welcome to MediAssist</h2>
-						<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
-						<div class="welcome-chips">
-							<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
+						<h2>Welcome to MediQuery</h2>
+						<p>Your professional medical AI companion. Ask about symptoms, conditions, treatments, lifestyle changes, and evidence-based health information.</p>
+						<div class="welcome-chips" role="group" aria-label="Suggested questions">
+							<button class="suggestion-chip" data-query="What are the common symptoms of a cold?" title="Ask about cold symptoms" type="button">
 								<i class="fas fa-thermometer-half"></i>
-								Cold symptoms
+								<span>Cold symptoms</span>
 							</button>
-							<button class="suggestion-chip" data-query="How can I manage a headache?">
+							<button class="suggestion-chip" data-query="How can I manage a headache effectively?" title="Ask about headache management" type="button">
 								<i class="fas fa-head-side-cough"></i>
-								Headache tips
+								<span>Headache tips</span>
 							</button>
-							<button class="suggestion-chip" data-query="What causes high blood pressure?">
+							<button class="suggestion-chip" data-query="What causes high blood pressure and how can it be managed?" title="Ask about blood pressure" type="button">
 								<i class="fas fa-heartbeat"></i>
-								Blood pressure
+								<span>Blood pressure</span>
 							</button>
 						</div>
-						<p class="welcome-disclaimer">
+						<p class="welcome-disclaimer" role="alert">
 							<i class="fas fa-info-circle"></i>
-							This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
+							<span>⚠️ <strong>Disclaimer:</strong> This AI provides informational content only. Always consult qualified healthcare professionals for medical diagnosis, treatment decisions, or emergency situations.</span>
 						</p>
 					</div>
 				</div>
 
-				<!-- Input Area -->
 				<div class="input-area">
-					<form id="messageArea" class="message-composer">
-						<label for="text" class="sr-only">Type your message</label>
+					<form id="messageArea" class="message-composer" role="search" aria-label="Message composer">
+						<label for="text" class="sr-only">Type your question or message</label>
 						<div class="input-wrapper">
-							<input type="text" id="text" name="msg" placeholder="Ask a health question…" autocomplete="off" required/>
-							<button type="submit" id="send" class="send-btn" aria-label="Send message">
+							<input type="text" id="text" name="msg" placeholder="Ask a medical question..." autocomplete="off" required aria-label="Message input field" title="Enter your health question here"/>
+							<button type="submit" id="send" class="send-btn" aria-label="Send message" title="Send your question (Enter)" data-loading="Sending…">
 								<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 									<line x1="22" y1="2" x2="11" y2="13"></line>
 									<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -114,7 +111,7 @@
 							</button>
 						</div>
 					</form>
-					<p class="input-hint">Press Enter to send · Not a substitute for professional medical advice</p>
+					<p class="input-hint" aria-label="Input instructions">For clinical decision support only. Always verify with qualified medical professionals.</p>
 				</div>
 			</main>
 		</div>
@@ -130,7 +127,16 @@
 			}
 
 			function parseMarkdownBold(text) {
-				return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+				const boldParsed = String(text).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+				// Remove leftover markdown markers from malformed model output like "** is"
+				return boldParsed.replace(/\*\*/g, '');
+			}
+
+			function splitIntoBulletCandidates(text) {
+				return String(text)
+					.split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+					.map((part) => part.trim())
+					.filter((part) => part.length > 0);
 			}
 
 			function renderBotMessageContent(message) {
@@ -158,7 +164,40 @@
 				}
 
 				if (bulletLines.length === 0) {
-					return '<p class="bot-text">' + parseMarkdownBold(escapeHtml(normalized)).replace(/\n/g, '<br>') + '</p>';
+					const paragraphBlocks = normalized
+						.split(/\n{2,}/)
+						.map((part) => part.trim())
+						.filter((part) => part.length > 0);
+
+					if (paragraphBlocks.length <= 1) {
+						const candidates = splitIntoBulletCandidates(normalized);
+						if (candidates.length >= 3) {
+							let autoBulletHtml = '<ul class="bot-list">';
+							for (const item of candidates) {
+								autoBulletHtml += '<li>' + parseMarkdownBold(escapeHtml(item)) + '</li>';
+							}
+							autoBulletHtml += '</ul>';
+							return autoBulletHtml;
+						}
+
+						return '<p class="bot-text">' + parseMarkdownBold(escapeHtml(normalized)).replace(/\n/g, '<br>') + '</p>';
+					}
+
+					let paragraphsHtml = '';
+					for (const block of paragraphBlocks) {
+						const candidates = splitIntoBulletCandidates(block);
+						if (candidates.length >= 3) {
+							paragraphsHtml += '<ul class="bot-list">';
+							for (const item of candidates) {
+								paragraphsHtml += '<li>' + parseMarkdownBold(escapeHtml(item)) + '</li>';
+							}
+							paragraphsHtml += '</ul>';
+						} else {
+							paragraphsHtml += '<p class="bot-text">' + parseMarkdownBold(escapeHtml(block)) + '</p>';
+						}
+					}
+
+					return paragraphsHtml;
 				}
 
 				let html = "";
@@ -175,8 +214,10 @@
 			}
 
 			function scrollMessagesToBottom() {
-				const container = document.getElementById("messageFormeight");
-				container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				const container = document.getElementById("messagesContainer");
+				setTimeout(() => {
+					container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				}, 50);
 			}
 
 			function setComposerState(isBusy) {
@@ -188,6 +229,9 @@
 				sendButton.setAttribute("aria-busy", isBusy ? "true" : "false");
 				input.classList.toggle("is-loading", isBusy);
 				sendButton.classList.toggle("is-loading", isBusy);
+				if (!isBusy) {
+					input.focus();
+				}
 			}
 
 			function hideWelcomeCard() {
@@ -211,19 +255,20 @@
 								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 							</svg>
 						</div>
-						<div class="message-bubble bot-bubble typing-indicator" aria-live="polite" aria-label="Bot is typing">
+						<div class="message-bubble bot-bubble typing-indicator" aria-live="polite" aria-label="Medical assistant is typing">
 							<span class="typing-dot"></span>
+														<p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-3); font-weight: 500;">Processing... (may take longer due to high demand)</p>
 							<span class="typing-dot"></span>
 							<span class="typing-dot"></span>
 						</div>
 					</div>`;
 
-				$("#messageFormeight").append(typingHtml);
+				$("#messagesContainer").append(typingHtml);
 				scrollMessagesToBottom();
 			}
 
 			function hideTypingIndicator() {
-				$("#typingIndicator").remove();
+				$("#typingIndicator").fadeOut(150, function() { $(this).remove(); });
 			}
 
 			function getTimeString() {
@@ -231,11 +276,76 @@
 				return String(date.getHours()).padStart(2, '0') + ":" + String(date.getMinutes()).padStart(2, '0');
 			}
 
+			function appendBotMessage(message, timeString, isError) {
+				const bubbleClass = isError ? "message-bubble bot-bubble bot-error" : "message-bubble bot-bubble";
+				const contentHtml = isError
+					? `<p class="bot-text"><strong>⚠️ Error:</strong> ${escapeHtml(message)}</p>`
+					: renderBotMessageContent(message);
+
+				var botHtml = `
+					<div class="message-row bot-row">
+						<div class="message-avatar bot-avatar">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+							</svg>
+						</div>
+						<div class="${bubbleClass}">
+							${contentHtml}
+							<span class="message-time">${timeString}</span>
+						</div>
+					</div>`;
+
+				$("#messagesContainer").append($.parseHTML(botHtml));
+				scrollMessagesToBottom();
+			}
+
+			function pollCompletedResponse(requestId, timeString, attemptsLeft) {
+				$.ajax({
+					data: { request_id: requestId },
+					type: "POST",
+					url: "/response-status",
+					timeout: 15000
+				}).done(function(payload) {
+					if (payload && payload.status === "ready" && payload.answer) {
+						hideTypingIndicator();
+						appendBotMessage(payload.answer, timeString, false);
+						setComposerState(false);
+						return;
+					}
+
+					if (attemptsLeft > 0) {
+						setTimeout(function() {
+							pollCompletedResponse(requestId, timeString, attemptsLeft - 1);
+						}, 2000);
+						return;
+					}
+
+					hideTypingIndicator();
+					appendBotMessage("The response is still processing. Please retry once in a few moments.", timeString, true);
+					setComposerState(false);
+				}).fail(function() {
+					if (attemptsLeft > 0) {
+						setTimeout(function() {
+							pollCompletedResponse(requestId, timeString, attemptsLeft - 1);
+						}, 2000);
+						return;
+					}
+
+					hideTypingIndicator();
+					appendBotMessage("Unable to fetch the generated response. Please try again.", timeString, true);
+					setComposerState(false);
+				});
+			}
+
 			function sendMessage(messageText) {
-				if (!messageText || !messageText.trim()) return;
+				if (!messageText || !messageText.trim()) {
+					alert("Please enter a question before sending.");
+					return;
+				}
 				
 				const str_time = getTimeString();
 				const safeText = escapeHtml(messageText.trim());
+				const requestId = "req_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
 
 				hideWelcomeCard();
 
@@ -249,158 +359,227 @@
 
 				setComposerState(true);
 				$("#text").val("");
-				$("#messageFormeight").append(userHtml);
+				$("#messagesContainer").append(userHtml);
 				scrollMessagesToBottom();
 				showTypingIndicator();
 
 				$.ajax({
-					data: { msg: messageText },
+					data: { msg: messageText, request_id: requestId },
 					type: "POST",
 					url: "/get",
+					timeout: 900000  // 15 minutes - prevents premature timeout before backend response
 				}).done(function(data) {
 					hideTypingIndicator();
-					var botHtml = `
-						<div class="message-row bot-row">
-							<div class="message-avatar bot-avatar">
-								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-								</svg>
-							</div>
-							<div class="message-bubble bot-bubble">
-								${renderBotMessageContent(data)}
-								<span class="message-time">${str_time}</span>
-							</div>
-						</div>`;
-					$("#messageFormeight").append($.parseHTML(botHtml));
+					appendBotMessage(data, str_time, false);
 					setComposerState(false);
-					scrollMessagesToBottom();
-				}).fail(function() {
+				}).fail(function(jqXHR, textStatus, errorThrown) {
+					if (textStatus === 'timeout' || textStatus === 'error') {
+						pollCompletedResponse(requestId, str_time, 25);
+						return;
+					}
+
 					hideTypingIndicator();
-					var errorHtml = `
-						<div class="message-row bot-row">
-							<div class="message-avatar bot-avatar">
-								<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-									<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-								</svg>
-							</div>
-							<div class="message-bubble bot-bubble bot-error">
-								I couldn't load a reply just now. Please try again in a moment.
-								<span class="message-time">${str_time}</span>
-							</div>
-						</div>`;
-					$("#messageFormeight").append($.parseHTML(errorHtml));
+					appendBotMessage("I couldn't process your request at this moment. Please try again.", str_time, true);
 					setComposerState(false);
-					scrollMessagesToBottom();
 				});
 			}
 
-			// ── Dark Mode ──────────────────────────────────────
+			// ── Theme Management ──────────────────────────────────
 			function applyTheme(dark) {
+				const themeIcon = document.getElementById('themeIcon');
 				if (dark) {
 					document.documentElement.setAttribute('data-theme', 'dark');
-					$('#themeIcon').removeClass('fa-moon').addClass('fa-sun');
+					localStorage.setItem('theme', 'dark');
+					themeIcon.className = 'fas fa-sun';
 				} else {
 					document.documentElement.removeAttribute('data-theme');
-					$('#themeIcon').removeClass('fa-sun').addClass('fa-moon');
+					localStorage.setItem('theme', 'light');
+					themeIcon.className = 'fas fa-moon';
 				}
 			}
 
-			// Apply saved preference immediately (before DOM ready)
-			(function() {
-				const saved = localStorage.getItem('mediassist-theme');
-				if (saved === 'dark') {
-					document.documentElement.setAttribute('data-theme', 'dark');
+			const savedTheme = localStorage.getItem('theme');
+			applyTheme(savedTheme === 'dark');
+
+			document.getElementById('themeToggle').addEventListener('click', () => {
+				const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+				applyTheme(!isDark);
+			});
+
+			// ── Mobile Menu Toggle ───────────────────────────────
+			const menuToggle = document.getElementById('menuToggle');
+			const sidebar = document.querySelector('.sidebar');
+			
+			menuToggle.addEventListener('click', () => {
+				sidebar.classList.toggle('open');
+				const isOpen = sidebar.classList.contains('open');
+				menuToggle.setAttribute('aria-expanded', isOpen);
+			});
+
+			// Close sidebar when clicking outside on mobile
+			document.addEventListener('click', (e) => {
+				if (window.innerWidth <= 820) {
+					if (!sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+						sidebar.classList.remove('open');
+						menuToggle.setAttribute('aria-expanded', 'false');
+					}
 				}
-			})();
+			});
 
-			$(document).ready(function() {
-				// Restore icon state on load
-				const savedTheme = localStorage.getItem('mediassist-theme');
-				applyTheme(savedTheme === 'dark');
+			// ── Form Submission ──────────────────────────────────
+			const messageForm = document.getElementById('messageArea');
+			const messageInput = document.getElementById('text');
 
-				// Toggle handler
-				$("#themeToggle").on("click", function() {
-					const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-					const newTheme = !isDark;
-					applyTheme(newTheme);
-					localStorage.setItem('mediassist-theme', newTheme ? 'dark' : 'light');
-				});
+			messageForm.addEventListener('submit', (e) => {
+				e.preventDefault();
+				const message = messageInput.value.trim();
+				if (message) {
+					sendMessage(message);
+				}
+			});
 
-				// Sidebar toggle
-				$("#menuToggle").on("click", function() {
-					$("#sidebar").toggleClass("open");
-				});
+			// Allow Enter key to submit
+			messageInput.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					messageForm.dispatchEvent(new Event('submit'));
+				}
+			});
 
-				// Close sidebar on outside click (mobile)
-				$(".chat-main").on("click", function() {
-					if (window.innerWidth <= 768) {
-						$("#sidebar").removeClass("open");
-					}
-				});
+			// Send button click handler
+			document.getElementById('send').addEventListener('click', (e) => {
+				e.preventDefault();
+				messageForm.dispatchEvent(new Event('submit'));
+			});
 
-				// Clear chat
-				$("#clearChat, #newChatBtn").on("click", function() {
-					if ($("#messageFormeight").children().length <= 1 && document.getElementById("welcomeCard")) {
-						return; // Nothing to clear
-					}
-					if (confirm("Start a new conversation?")) {
-						$.ajax({
-							type: "POST",
-							url: "/clear",
-						}).done(function() {
-							$("#messageFormeight").empty();
-							// Re-add welcome card
-							const welcomeHtml = `
-								<div class="welcome-card" id="welcomeCard">
-									<div class="welcome-icon">
-										<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-											<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-										</svg>
-									</div>
-									<h2>Welcome to MediAssist</h2>
-									<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
-									<div class="welcome-chips">
-										<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
-											<i class="fas fa-thermometer-half"></i>
-											Cold symptoms
-										</button>
-										<button class="suggestion-chip" data-query="How can I manage a headache?">
-											<i class="fas fa-head-side-cough"></i>
-											Headache tips
-										</button>
-										<button class="suggestion-chip" data-query="What causes high blood pressure?">
-											<i class="fas fa-heartbeat"></i>
-											Blood pressure
-										</button>
-									</div>
-									<p class="welcome-disclaimer">
-										<i class="fas fa-info-circle"></i>
-										This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
-									</p>
-								</div>`;
-							$("#messageFormeight").append(welcomeHtml);
-						}).fail(function() {
-							alert("Failed to clear conversation. Please try again.");
-						});
-					}
-				});
-
-				// Suggestion chips
-				$(document).on("click", ".suggestion-chip", function() {
-					const query = $(this).data("query");
-					if (query) {
-						sendMessage(query);
-					}
-				});
-
-				// Send message
-				$("#messageArea").on("submit", function(event) {
-					event.preventDefault();
-					const rawText = $("#text").val();
-					sendMessage(rawText);
+			// Suggestion chips click handlers
+			document.querySelectorAll('.suggestion-chip').forEach(chip => {
+				chip.addEventListener('click', () => {
+					const text = chip.getAttribute('data-text') || chip.textContent.trim();
+					messageInput.value = text;
+					messageForm.dispatchEvent(new Event('submit'));
 				});
 			});
+
+			// ── Help Modal ───────────────────────────────────────
+			document.addEventListener('DOMContentLoaded', () => {
+				const helpBtn = document.getElementById('helpBtn');
+				const helpModal = document.getElementById('helpModal');
+				const closeHelpBtn = document.getElementById('closeHelpBtn');
+
+				if (helpBtn && helpModal && closeHelpBtn) {
+					helpBtn.addEventListener('click', () => {
+						helpModal.style.display = 'flex';
+					});
+
+					closeHelpBtn.addEventListener('click', () => {
+						helpModal.style.display = 'none';
+					});
+
+					helpModal.addEventListener('click', (e) => {
+						if (e.target === helpModal) {
+							helpModal.style.display = 'none';
+						}
+					});
+				}
+
+				// New conversation / Clear chat handler
+				const newChatBtn = document.getElementById('newChatBtn');
+				if (newChatBtn) {
+					newChatBtn.addEventListener('click', (ev) => {
+						ev.preventDefault();
+						if (!confirm('Start a new conversation? This will clear the current chat.')) return;
+						fetch('/clear', { method: 'POST' })
+							.then((resp) => {
+								if (!resp.ok) throw new Error('Clear failed');
+								// Reload to ensure session cleared server-side and UI resets.
+								location.reload();
+							})
+							.catch(() => {
+								alert('Failed to clear chat. Please reload the page.');
+							});
+					});
+				}
+			});
 		</script>
+
+		<!-- Help Modal -->
+		<div id="helpModal" class="help-modal">
+			<div class="help-modal-content">
+				<div class="help-modal-header">
+					<h2><i class="fas fa-info-circle"></i> About Medical AI Chatbot</h2>
+					<button id="closeHelpBtn" class="close-help-btn" aria-label="Close help" onclick="document.getElementById('helpModal').style.display='none'">
+						<i class="fas fa-times"></i>
+					</button>
+				</div>
+				<div class="help-modal-body">
+					<section class="help-section">
+						<h3><i class="fas fa-robot"></i> What is this?</h3>
+						<p>This is an <strong>AI-powered Medical Chatbot</strong> designed to provide informational support for health-related questions. It uses advanced AI technology combined with a verified medical knowledge base to deliver accurate, context-aware responses.</p>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-book-medical"></i> Knowledge Base</h3>
+						<ul>
+							<li><strong>Source:</strong> Medical reference documents (Medical_book.pdf)</li>
+							<li><strong>Topics Covered:</strong> General health, symptoms, conditions, treatments, medications, and wellness advice</li>
+							<li><strong>Technology:</strong> RAG (Retrieval-Augmented Generation) pipeline with semantic search</li>
+							<li><strong>Embeddings:</strong> all-MiniLM-L6-v2 (384-dimensional vectors)</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-lightbulb"></i> How to Use</h3>
+						<ol>
+							<li><strong>Ask Questions:</strong> Type your health-related query in the input field</li>
+							<li><strong>Be Specific:</strong> Provide clear details for better responses (symptoms, duration, etc.)</li>
+							<li><strong>Follow-up:</strong> Ask clarifying questions - the bot remembers conversation context</li>
+							<li><strong>Clear Chat:</strong> Use the trash icon to start a new conversation</li>
+							<li><strong>Theme Toggle:</strong> Switch between light and dark mode with the moon/sun icon</li>
+						</ol>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-exclamation-triangle"></i> Important Disclaimer</h3>
+						<div class="help-warning">
+							<p><strong>This AI provides informational content ONLY.</strong></p>
+							<ul>
+								<li>Always consult qualified healthcare professionals for medical diagnosis</li>
+								<li>Do not use for emergency situations - call emergency services instead</li>
+								<li>Information may not be complete or up-to-date</li>
+								<li>Not a substitute for professional medical advice, diagnosis, or treatment</li>
+							</ul>
+						</div>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-shield-alt"></i> Privacy & Security</h3>
+						<ul>
+							<li>Conversations are processed securely using Groq AI infrastructure</li>
+							<li>Session-based memory - chats are not permanently stored</li>
+							<li>Vector database: Pinecone (secure cloud storage)</li>
+							<li>No personal medical data is shared with third parties</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-cogs"></i> Technical Features</h3>
+						<ul>
+							<li><strong>Query Rewriting:</strong> AI understands pronouns and context from chat history</li>
+							<li><strong>Smart Retrieval:</strong> MMR + Cross-Encoder reranking for best context</li>
+							<li><strong>Response Quality:</strong> Faithful to medical sources with strict abstention</li>
+							<li><strong>Model:</strong> Llama 3.3 70B (high-quality medical reasoning)</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-envelope"></i> Feedback & Support</h3>
+						<p>Developed by <strong>Kinza</strong></p>
+						<p>For issues, suggestions, or feedback, please contact the development team.</p>
+					</section>
+				</div>
+			</div>
+		</div>
         
     </body>
 </html>

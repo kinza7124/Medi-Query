@@ -110,6 +110,30 @@ class TestQueryProcessing:
             response = get_greeting_response(query)
             assert response is None, f"'{query}' should not trigger greeting response"
 
+    def test_validate_user_input_empty(self):
+        """Test validation rejects empty input."""
+        from app import validate_user_input
+
+        valid, message = validate_user_input("   ")
+        assert valid is False
+        assert "Please enter a message" in message
+
+    def test_validate_user_input_max_length(self):
+        """Test validation rejects overlong input (>500 chars)."""
+        from app import validate_user_input
+
+        valid, message = validate_user_input("a" * 501)
+        assert valid is False
+        assert "500" in message
+
+    def test_validate_user_input_script_content(self):
+        """Test validation rejects script-like input."""
+        from app import validate_user_input
+
+        valid, message = validate_user_input("<script>alert('xss')</script>")
+        assert valid is False
+        assert "HTML" in message or "script" in message
+
 
 # ============================================================================
 # Conversation Memory Tests
@@ -219,6 +243,13 @@ class TestResponseProcessing:
         assert "consult" in result.lower() or "physician" in result.lower() or "doctor" in result.lower()
         assert "Take rest for headache" in result
 
+    def test_detect_emergency_keywords(self):
+        """Test emergency symptom keyword detection."""
+        from app import detect_emergency_keywords
+
+        assert detect_emergency_keywords("I have chest pain and difficulty breathing") is True
+        assert detect_emergency_keywords("I have mild acne") is False
+
 
 # ============================================================================
 # Query Rewrite Tests
@@ -292,6 +323,35 @@ class TestIntegration:
         assert "Diabetes is a disease." in result
         assert "It affects blood sugar." in result
         assert "\n\n" in result  # Documents separated by double newline
+
+    def test_chat_route_rejects_invalid_input(self):
+        """Test /get route rejects unsafe/script input."""
+        from app import app
+
+        client = app.test_client()
+        response = client.post("/get", data={"msg": "<script>alert('xss')</script>"})
+
+        assert response.status_code == 200
+        body = response.get_data(as_text=True)
+        assert "HTML" in body or "script" in body
+
+    @patch('app.get_rag_chain')
+    @patch('app.get_rag_chain_fallback')
+    @patch('app.rewrite_query_for_retrieval')
+    def test_chat_route_appends_emergency_message(self, mock_rewrite, mock_fallback_chain, mock_primary_chain):
+        """Test /get route appends emergency notice for emergency-like queries."""
+        from app import app
+
+        mock_rewrite.return_value = "chest pain emergency"
+        mock_primary_chain.return_value.invoke.return_value = "You may have a serious condition."
+        mock_fallback_chain.return_value.invoke.return_value = "fallback"
+
+        client = app.test_client()
+        response = client.post("/get", data={"msg": "I have chest pain"})
+
+        assert response.status_code == 200
+        body = response.get_data(as_text=True).lower()
+        assert "emergency services" in body
 
 
 # ============================================================================

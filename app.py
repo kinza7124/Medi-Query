@@ -63,8 +63,19 @@ GROQ_API_KEY=os.environ.get('GROQ_API_KEY')
 if not PINECONE_API_KEY or not GROQ_API_KEY:
     logger.error("Missing critical API keys in environment variables!")
 
-os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
-os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY or ""
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY or ""
+
+MAX_QUERY_LENGTH = 500
+_UNSAFE_QUERY_PATTERN = re.compile(
+    r"(<\s*/?\s*script\b|javascript:|on\w+\s*=|<\s*img\b|<\s*iframe\b)",
+    flags=re.IGNORECASE,
+)
+_EMERGENCY_QUERY_PATTERN = re.compile(
+    r"\b(chest pain|difficulty breathing|shortness of breath|stroke|seizure|"
+    r"unconscious|fainting|severe bleeding|overdose|poisoning|suicidal|heart attack)\b",
+    flags=re.IGNORECASE,
+)
 
 
 @lru_cache(maxsize=1)
@@ -221,6 +232,31 @@ def format_docs(docs: list) -> str:
 
 def has_ambiguous_pronoun(text: str) -> bool:
     return bool(re.search(r"\b(it|this|that|its|they|them|their|these|those)\b", text, re.IGNORECASE))
+
+
+def validate_user_input(user_query: str) -> tuple[bool, str]:
+    """Validate user input for emptiness, length, and unsafe content."""
+    if user_query is None:
+        return False, "Please enter a message."
+
+    cleaned_query = user_query.strip()
+    if not cleaned_query:
+        return False, "Please enter a message."
+
+    if len(cleaned_query) > MAX_QUERY_LENGTH:
+        return False, f"Please keep your message under {MAX_QUERY_LENGTH} characters."
+
+    if "<" in cleaned_query or ">" in cleaned_query or _UNSAFE_QUERY_PATTERN.search(cleaned_query):
+        return False, "Please remove HTML or script-like content from your message."
+
+    return True, cleaned_query
+
+
+def detect_emergency_keywords(user_query: str) -> bool:
+    """Detect symptom patterns that warrant urgent-care guidance."""
+    if not user_query:
+        return False
+    return bool(_EMERGENCY_QUERY_PATTERN.search(user_query))
 
 
 COMMON_QUERY_FIXES = [
@@ -1005,10 +1041,13 @@ def response_status():
 
 @app.route("/get", methods=["GET", "POST"])
 def chat():
-    user_query = request.form.get("msg", "").strip()
+    raw_query = request.form.get("msg", "")
     request_id = request.form.get("request_id", "").strip()
-    if not user_query:
-        return "Please enter a message."
+    is_valid, validation_result = validate_user_input(raw_query)
+    if not is_valid:
+        return validation_result
+
+    user_query = validation_result
 
     # Initialize session memory
     get_session_memory()
@@ -1079,6 +1118,11 @@ def chat():
             final_answer = enforce_compact_structure(user_query, final_answer)
         final_answer = stabilize_medication_answer(user_query, final_answer)
         final_answer = append_clinical_safety_note(user_query, final_answer)
+        if detect_emergency_keywords(user_query):
+            final_answer = (
+                f"{final_answer}\n\n"
+                "This may be an emergency. Call local emergency services immediately or go to the nearest emergency department."
+            )
         final_answer = move_disclaimer_to_end(final_answer)
         # If the user used a pronoun (e.g., "it", "that") ensure the response
         # explicitly references the previous topic so it's clear what "it" refers to.

@@ -423,8 +423,14 @@ APPROVAL:
 # Run the project test suite
 pytest tests/test_app.py -v
 
+# Run system workflow tests (route/session/cache behavior)
+pytest tests/test_system_workflows.py -v
+
 # Run with concise output
 pytest -q tests/test_app.py
+
+# Run all tests
+pytest -q
 
 # Run the evaluation script in quota-safe mode
 EVAL_USE_RAGAS=false EVAL_SAMPLE_SIZE=5 EVAL_GENERATION_MODEL=llama-3.1-8b-instant python run_comprehensive_evaluation.py
@@ -434,7 +440,9 @@ EVAL_USE_RAGAS=false EVAL_SAMPLE_SIZE=5 EVAL_GENERATION_MODEL=llama-3.1-8b-insta
 
 Latest validation performed during report preparation:
 
-- `pytest -q tests/test_app.py` now reports **18 passed, 2 skipped**.
+- `pytest -q tests/test_app.py tests/test_system_workflows.py` now reports **27 passed, 2 skipped**.
+- `tests/test_app.py` now also includes input validation (`500` char cap, script-like payload rejection) and emergency keyword detection coverage.
+- `tests/test_system_workflows.py` adds route-level system workflow checks for `/health`, `/clear`, `/get`, and `/response-status`.
 - The app exports `format_docs` and accepts string-based chat history in `rewrite_query_for_retrieval`.
 - Quota-safe evaluation mode is available for report generation when Groq limits are exhausted.
 

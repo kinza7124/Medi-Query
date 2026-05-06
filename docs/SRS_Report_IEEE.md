@@ -54,7 +54,7 @@ The Medical AI Chatbot shall:
 - Integration with Electronic Health Records (EHR)
 - Real-time doctor consultation features
 
-### 1.3 Definitions and Acronyms
+### 1.4 Definitions and Acronyms
 
 | Term | Definition |
 |------|------------|
@@ -67,14 +67,14 @@ The Medical AI Chatbot shall:
 | **LangChain** | Framework for developing applications powered by language models |
 | **Contextual Compression** | Technique to filter and rank retrieved documents by relevance |
 
-### 1.4 References
+### 1.5 References
 1. IEEE Std 830-1998, IEEE Recommended Practice for Software Requirements Specifications
 2. LangChain Documentation, https://python.langchain.com/
 3. Pinecone Vector Database Documentation, https://docs.pinecone.io/
 4. Groq API Documentation, https://console.groq.com/docs
 5. Flask Web Framework Documentation, https://flask.palletsprojects.com/
 
-### 1.5 Overview
+### 1.6 Overview
 This document is organized as follows:
 - Section 2: Overall System Description
 - Section 3: Specific Requirements (Functional and Non-Functional)
@@ -87,15 +87,6 @@ This document is organized as follows:
 
 ### 2.1 Product Perspective
 The Medical AI Chatbot is a standalone web application built on a client-server architecture. It integrates multiple external services and follows a microservices-inspired design pattern.
-
-**System Context Diagram:**
-```
-[User Browser] <--HTTP--> [Flask Web Server] <--API--> [Groq LLM]
-                                |
-                                |<--API--> [Pinecone Vector DB]
-                                |
-                                |<--Local--> [HuggingFace Embeddings]
-```
 
 ### 2.2 Product Functions
 1. **Query Processing**: Accept and parse user medical queries
@@ -261,232 +252,21 @@ The system implements the RAG pattern combining:
 2. **Augmentation Component**: Context injection into LLM prompt
 3. **Generation Component**: LLM response synthesis
 
-### 4.2 Component Diagram (Mermaid)
+### 4.2 System Architecture Figures
 
-```mermaid
-graph TB
-    subgraph Client["Client Layer"]
-        Browser["Web Browser<br/>User Interface"]
-    end
-    
-    subgraph FlaskApp["Flask Application Server"]
-        Routes["Flask Routes<br/>/get, /clear"]
-        Services["Core Services"]
-        Memory["Memory Manager<br/>Session History"]
-        
-        subgraph Services["Core Services"]
-            QR["Query Rewrite<br/>LLM-based"]
-            RAG["RAG Chain<br/>Retrieval + Generation"]
-        end
-    end
-    
-    subgraph ExternalServices["External Services"]
-        Pinecone[("Pinecone<br/>Vector Database")]
-        Groq[("Groq API<br/>Llama 3.3 70B")]
-        HuggingFace[("HuggingFace<br/>Embeddings")]
-    end
-    
-    Browser -->|"HTTP POST /get"| Routes
-    Routes -->|"Process Query"| Services
-    Services -->|"Store/Retrieve"| Memory
-    
-    QR -->|"Embed Query"| HuggingFace
-    HuggingFace -->|"Vector"| Pinecone
-    Pinecone -->|"Documents"| RAG
-    RAG -->|"Generate"| Groq
-    Groq -->|"Response"| Routes
-    Routes -->|"JSON Response"| Browser
-```
+**Figure 1. Complete RAG Pipeline Architecture**  
+![Complete RAG Pipeline Architecture](image-3.png)
 
-### 4.3 Complete RAG Pipeline Architecture
+**Figure 2. RAG Query Workflow**  
+![RAG Query Workflow](image-2.png)
 
-**Full System Architecture Diagram:**
+**Figure 3. RAG UML Diagram**  
+![RAG Sequence Diagram](image-1.png)
 
-![Complete RAG Pipeline Architecture](diagrams/rag_complete_architecture.png)
+### 4.3 CI/CD Pipeline and Cloud Deployment
 
-*Figure 2: Complete RAG pipeline showing Document Indexing, Query Processing, and Response Generation pipelines*
-
-**Architecture Components:**
-
-| Pipeline Section | Components | Key Parameters |
-|------------------|------------|----------------|
-| **📚 Document Indexing** | PDF → Loader → Chunker → Embed → Pinecone | chunk_size=800, chunk_overlap=100, 384-dim embeddings |
-| **🔍 Query Processing** | Flask → Rewriter → MMR → Reranker → Compressor | k=10, fetch_k=30, lambda_mult=0.5, top_n=4 |
-| **🤖 Response Generation** | Prompt → LLM → Cleaner → Safety → Output | 3.3 70B, Context-only, 10 exchange memory |
-
-**Full System Architecture (Mermaid Code):**
-
-```mermaid
-flowchart TB
-    subgraph Indexing["📚 DOCUMENT INDEXING PIPELINE"]
-        direction TB
-        PDF[("Medical PDFs<br/>Data/")] --> Loader[Document Loader<br/>PyPDF/Directory]
-        Loader --> Text[Raw Text<br/>Extraction]
-        Text --> Chunker[Context-Aware<br/>Chunking]
-        Chunker -->|chunk_size=800<br/>chunk_overlap=100| Chunks[Text Chunks]
-        Chunks --> Embed[Embedding Model<br/>all-MiniLM-L6-v2]
-        Embed -->|384 dimensions| Vectors[Vector Embeddings]
-        Vectors -->|Cosine Similarity| Pinecone[("Pinecone Vector DB<br/>Index: medical-chatbot<br/>AWS us-east-1")]
-    end
-
-    subgraph Query["🔍 QUERY PROCESSING PIPELINE"]
-        direction TB
-        UserQuery[User Query] -->|Input| Flask[Flask App<br/>Session Memory]
-        Flask --> GreetingCheck{Greeting or<br/>Personal?}
-        GreetingCheck -->|Yes| DirectAnswer[Predefined Response]
-        GreetingCheck -->|No| Rewriter[Query Rewriter<br/>Llama 3.1 8B]
-        
-        Rewriter -->|Optimized Query| Retriever[Vector Retriever]
-        Retriever -->|search_type=mmr<br/>k=10, fetch_k=30| MMR[MMR Retrieval<br/>lambda_mult=0.5]
-        MMR -->|Cosine Similarity| InitialDocs[10 Documents]
-        
-        InitialDocs --> Reranker[Cross-Encoder Reranker<br/>ms-marco-MiniLM-L-6-v2]
-        Reranker -->|top_n=4| FilteredDocs[4 Top Documents]
-        
-        FilteredDocs --> Compressor[Contextual<br/>Compression]
-        Compressor --> Context[Retrieved Context]
-    end
-
-    subgraph Generation["🤖 RESPONSE GENERATION"]
-        direction TB
-        Context --> Prompt[Prompt Builder<br/>System + Context + History]
-        Prompt --> LLM[Llama 3.3 70B<br/>ChatGroq API]
-        LLM -->|Strict Context-Only| Response[Generated Response]
-        Response --> Cleaner[Answer Cleaner<br/>Remove Meta-refs]
-        Cleaner --> Safety[Safety Check<br/>Add Disclaimer]
-        Safety --> Output[Final Response<br/>to User]
-        Output -->|Update| Memory[Session Memory<br/>Last 10 Exchanges]
-    end
-
-    Pinecone -.->|Vector Search| Retriever
-    Memory -.->|Chat History| Rewriter
-    Memory -.->|Context| Prompt
-
-    style Indexing fill:#e3f2fd
-    style Query fill:#fff3e0
-    style Generation fill:#e8f5e9
-    style UserQuery fill:#ffebee
-    style Output fill:#c8e6c9
-```
-
-### 4.4 Data Flow
-
-**RAG Pipeline Sequence Diagram:**
-
-![RAG Pipeline Sequence](diagrams/rag_sequence_diagram.png)
-
-*Figure 1: Complete RAG pipeline sequence showing user query flow through all system components*
-
-**RAG Pipeline Sequence (Mermaid Code):**
-
-```mermaid
-sequenceDiagram
-    participant User as User Browser
-    participant Flask as Flask Server
-    participant Memory as Session Memory
-    participant Rewrite as Query Rewrite LLM
-    participant Embeddings as HuggingFace
-    participant Pinecone as Pinecone Vector DB
-    participant Reranker as Cross-Encoder
-    participant Groq as Groq LLM
-
-    User->>Flask: POST /get (user_query)
-    Flask->>Memory: Get chat_history
-    Memory-->>Flask: Return conversation history
-    
-    alt Contains Pronouns
-        Flask->>Rewrite: Send query + history
-        Rewrite-->>Flask: Return rewritten_query
-    else No Pronouns
-        Flask->>Flask: Use original query
-    end
-    
-    Flask->>Embeddings: Generate query embedding
-    Embeddings-->>Flask: Return 384-dim vector
-    
-    Flask->>Pinecone: similarity_search(vector, k=10)
-    Pinecone-->>Flask: Return 10 documents
-    
-    Flask->>Reranker: rerank(query, docs)
-    Reranker-->>Flask: Return top 4 documents
-    
-    Flask->>Groq: Generate(context + query)
-    Groq-->>Flask: Return generated response
-    
-    Flask->>Memory: Update history (user_query, response)
-    Flask-->>User: Return formatted response
-```
-
-**Step-by-Step Data Flow:**
-
-1. **User Input** → Web Interface → Flask Route (`/get`)
-2. **Session Retrieval** → Flask fetches chat history from session storage
-3. **Query Rewrite** → If query contains pronouns, LLM resolves them using history
-4. **Embedding Generation** → HuggingFace `all-MiniLM-L6-v2` creates 384-dimensional vector
-5. **Vector Search** → Pinecone retrieves top-10 similar documents using cosine similarity
-6. **Contextual Reranking** → Cross-encoder `ms-marco-MiniLM-L-6-v2` reranks to top-4
-7. **Context Assembly** → Top documents formatted into system prompt template
-8. **Response Generation** → Groq LLM (`llama-3.3-70b-versatile`) generates answer
-9. **Response Delivery** → Flask returns JSON response with formatted text
-10. **Memory Update** → Exchange added to Flask session history (max 10 exchanges)
-
-### 4.5 CI/CD Pipeline and Cloud Deployment
-
-**CI/CD Pipeline Architecture:**
-
-![CI/CD Pipeline Architecture](diagrams/cicd_architecture.png)
-
-*Figure 3: Complete CI/CD workflow from Git push to AWS EC2 deployment*
-
-**Deployment Architecture (AWS Cloud) - Mermaid:**
-
-```mermaid
-flowchart LR
-    subgraph Developer["🧑‍💻 Developer Workflow"
-        direction TB
-        GitPush["Git Push<br/>main branch"]
-        Dockerfile["Dockerfile<br/>Python 3.10 + App"]
-    end
-    
-    subgraph GitHubActions["🔧 GitHub Actions CI/CD"]
-        direction TB
-        subgraph CI["CI: Build & Push"]
-            Build["Build Docker Image"]
-            PushECR["Push to ECR"]
-        end
-        
-        subgraph CD["CD: Deploy"]
-            EC2Deploy["AWS EC2 Instance<br/>Self-hosted Runner"]
-            DockerRun["Docker Run<br/>Port 8080"]
-        end
-    end
-    
-    subgraph AWSServices["☁️ AWS Infrastructure"]
-        direction TB
-        ECRRepo[("Amazon ECR<br/>Container Registry")]
-        EC2Instance[("EC2 Instance<br/>t2.micro/t3.small")]
-    end
-    
-    subgraph ExternalAPIs["🌐 External APIs"]
-        direction TB
-        GroqAPI["Groq API<br/>LLM Inference"]
-        PineconeAPI["Pinecone API<br/>Vector Search"]
-    end
-    
-    GitPush -->|Trigger| CI
-    Dockerfile -->|Build Context| Build
-    Build -->|docker push| PushECR
-    PushECR -->|Store| ECRRepo
-    PushECR -->|Trigger| CD
-    EC2Deploy -->|Pull & Run| EC2Instance
-    EC2Instance -->|API Calls| GroqAPI
-    EC2Instance -->|Vector Search| PineconeAPI
-    
-    style Developer fill:#e3f2fd
-    style GitHubActions fill:#f3e5f5
-    style AWSServices fill:#e8f5e9
-    style ExternalAPIs fill:#ffebee
-```
+**Figure 4. CI/CD Pipeline Architecture**  
+![CI/CD Pipeline Architecture](image.png)
 
 **CI/CD Workflow Description:**
 
@@ -685,9 +465,73 @@ CMD ["gunicorn", "--workers", "2", "--worker-class", "gthread", "--threads", "8"
 
 ---
 
-## 6. Performance Comparison and Validation
+## 6. Implementation Compliance and Validation Evidence
 
-### 6.1 Latest Evaluation Results (Report-Ready)
+### 6.1 Compliance Statement
+
+This section provides implementation evidence against the specified requirements in Section 3 and validation evidence from automated testing and runtime checks.  
+Compliance status categories:
+- **Implemented**: Requirement behavior is present in code.
+- **Validated**: Behavior is covered by automated tests and/or execution evidence.
+- **Partial**: Behavior exists but operational instrumentation or full environment validation is pending.
+
+### 6.2 Requirement-to-Implementation Compliance Matrix
+
+| Requirement ID | Requirement Summary | Implementation Evidence | Validation Evidence | Status |
+|----------------|---------------------|-------------------------|---------------------|--------|
+| FR-QP-01 | Accept text input via web interface | Flask `/get` route | Unit + route tests | Implemented + Validated |
+| FR-QP-02 | Basic XSS sanitization | Input validator rejects script-like/HTML payloads | Automated tests for unsafe input | Implemented + Validated |
+| FR-QP-03 | Reject empty input | Input validator rejects blank/whitespace | Automated test coverage | Implemented + Validated |
+| FR-QP-04 | Handle input up to 500 chars | `MAX_QUERY_LENGTH = 500` enforcement | Automated over-length test | Implemented + Validated |
+| FR-QP-05 | Detect greeting/personal questions | Greeting classifier and dedicated responses | Unit test coverage | Implemented + Validated |
+| FR-QR-01 | Rewrite query for retrieval | Query rewrite chain + normalization | Unit tests + runtime logs | Implemented + Validated |
+| FR-QR-02 | Pronoun resolution from history | Pronoun detection + topic anchoring | Unit + workflow tests | Implemented + Validated |
+| FR-QR-03 | Use most recent topic | Session `current_topic` + anchoring strategy | Multi-turn workflow tests | Implemented + Validated |
+| FR-QR-04 | Correct medical spelling | Common typo normalization list | Unit function tests | Implemented + Validated |
+| FR-DR-01..06 | Embedding + retrieval + rerank pipeline | Embeddings + MMR + cross-encoder reranker | Unit + integration-style tests | Implemented + Validated |
+| FR-RG-01 | Context-grounded response generation | RAG chain with retrieved context | Functional test evidence | Implemented + Validated |
+| FR-RG-05 | Clinical disclaimer behavior | Safety note appending logic | Unit tests | Implemented + Validated |
+| FR-RG-06 | Emergency symptom urgent guidance | Emergency keyword detection + escalation text | Unit + route tests | Implemented + Validated |
+| FR-CM-01..05 | Session memory and clear-chat | Session history + `/clear` route | Workflow tests | Implemented + Validated |
+| NFR-SC-01 | API keys in environment vars | `os.environ` loading | Configuration checks | Implemented |
+| NFR-RL-01..04 | Error handling + fallback behavior | Primary/fallback model strategy + exception handling | Test and runtime evidence | Implemented + Partial Validation |
+| NFR-PF-01..06 | Performance/availability targets | Model preloading and optimized retrieval | Needs production telemetry | Partial |
+
+### 6.3 Validation Evidence Summary
+
+**Automated test execution snapshot:**
+- `pytest -q tests/test_app.py tests/test_system_workflows.py`
+- Result: **27 passed, 2 skipped**
+
+**Validated behavior areas:**
+1. Query validation (empty, max length, unsafe payloads)
+2. Greeting routing and non-medical handling path
+3. Query rewriting and pronoun context anchoring
+4. Route-level workflow (`/get`, `/clear`, `/health`, `/response-status`)
+5. Clinical safety and emergency escalation handling
+
+### 6.4 Optimization Decisions and Design Trade-offs
+
+1. **Retrieval Quality vs Latency**
+- MMR retrieval plus cross-encoder reranking improves relevance and reduces hallucination risk.
+- Trade-off: added retrieval latency from reranking.
+
+2. **Reliability Under API Limits**
+- Primary model uses higher-capability generation; fallback model handles rate-limit events.
+- Trade-off: fallback output quality can be lower but preserves service continuity.
+
+3. **Conversation Context Control**
+- Session topic tracking is used for pronoun disambiguation only, reducing topic drift.
+- Trade-off: conservative context use may reduce recall for very long conversations.
+
+4. **Safety and User Clarity**
+- Post-processing enforces cleaner output and appends clinical guidance where needed.
+- Emergency keyword detection provides explicit urgent-care instructions.
+
+
+## 7. Performance Comparison and Validation
+
+### 7.1 Latest Evaluation Results (Report-Ready)
 
 **Evaluation Date:** May 3, 2026  
 **Evaluator:** Kinza  
@@ -723,7 +567,7 @@ rouge_l_score: 0.1549
 overall_score: 0.4346
 ```
 
-### 6.2 Analysis of Results
+### 7.2 Analysis of Results
 
 **Strengths:**
 1. **MRR (0.70)**: The first relevant document is usually surfaced early
@@ -738,7 +582,7 @@ overall_score: 0.4346
     - *Root Cause:* Answers are paraphrased rather than copied verbatim
     - *Recommendation:* Use stricter context grounding and shorter, more extractive answers
 
-### 6.3 Baseline Comparison
+### 7.3 Baseline Comparison
 
 | Metric | Without RAG | With RAG | Improvement |
 |--------|-------------|----------|-------------|
@@ -748,7 +592,7 @@ overall_score: 0.4346
 | Ranking Quality | N/A | MRR = 0.70, NDCG@5 = 0.62 | Good-to-moderate |
 | Response Time | ~2s | ~4s | Acceptable trade-off |
 
-### 6.4 Optimization Techniques Applied
+### 7.4 Optimization Techniques Applied
 
 1. **Model Caching**: `@lru_cache` for embedding and LLM models
 2. **Preloading**: Models loaded at startup to prevent cold-start latency
@@ -756,7 +600,7 @@ overall_score: 0.4346
 4. **Session Memory**: Prevents redundant retrievals for follow-up questions
 5. **Async Processing**: Non-blocking UI with typing indicators
 
-### 6.5 Deployment Readiness Notes
+### 7.5 Deployment Readiness Notes
 
 - The application now exposes a `/health` endpoint for load balancer and container probes.
 - The Docker image runs under Gunicorn instead of the Flask development server.
@@ -764,7 +608,7 @@ overall_score: 0.4346
 
 ---
 
-## 7. Appendices
+## 8. Appendices
 
 ### Appendix A: API Specifications
 

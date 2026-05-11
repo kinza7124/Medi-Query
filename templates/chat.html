@@ -2,13 +2,14 @@
 <html lang="en">
 	<head>
 		<meta charset="UTF-8">
-		<title>MediAssist — Your Medical AI Companion</title>
-		<meta name="description" content="A private, evidence-guided medical AI chatbot to help you understand symptoms, conditions, and health topics.">
+		<title>MediQuery — Medical AI Assistant</title>
+		<meta name="description" content="Professional medical AI chatbot offering evidence-based health information to educate and inform—never to replace professional medical advice.">
 		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-		<meta name="theme-color" content="#f0f4f8">
+		<meta name="theme-color" content="#3d8b7a">
+		<meta name="color-scheme" content="light dark">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 		<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.5.0/css/all.css" integrity="sha384-B4dIYHKNBt8Bc12p+WXckhzcICo0wtJAoU8YZTY5qE0Id1GSseTk6S+L3BlXeVIU" crossorigin="anonymous">
 		<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 		<link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css')}}"/>
@@ -16,97 +17,105 @@
 	
 	<body>
 		<div class="app-shell">
-			<!-- Sidebar -->
-			<aside class="sidebar" id="sidebar">
+			<aside class="sidebar" id="sidebar" role="navigation" aria-label="Navigation">
 				<div class="sidebar-brand">
-					<div class="brand-icon">
+					<div class="brand-icon" title="MediQuery">
 						<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 						</svg>
 					</div>
-					<span class="brand-name">MediAssist</span>
+					<span class="brand-name">MediQuery</span>
 				</div>
 				<nav class="sidebar-nav">
-					<button type="button" id="newChatBtn" class="nav-item active" aria-label="New conversation">
-						<i class="fas fa-plus"></i>
-						<span>New Chat</span>
+					<button type="button" id="newChatBtn" class="nav-item active" aria-label="Start new conversation" title="Clear conversation and start fresh">
+						<i class="fas fa-plus-circle"></i>
+						<span>New conversation</span>
 					</button>
+					<section class="recent-chats" aria-label="Recent chats">
+						<h3>Recent Chats</h3>
+						<ul class="recent-chat-list" id="recentChats">
+							<!-- Dynamic chat history will be rendered here -->
+						</ul>
+					</section>
 				</nav>
 				<div class="sidebar-footer">
-					<div class="safety-note">
-						<i class="fas fa-shield-alt"></i>
-						<span>Your conversations are private and not stored on any server.</span>
-					</div>
+					<button type="button" class="help-btn" id="helpBtn" aria-label="Help and information" onclick="document.getElementById('helpModal').style.display='flex'">
+						<i class="far fa-life-ring"></i>
+						<span>Help & Info</span>
+					</button>
 				</div>
 			</aside>
 
-			<!-- Main Chat Area -->
-			<main class="chat-main">
-				<!-- Top Bar -->
-				<header class="chat-topbar">
-					<button type="button" id="menuToggle" class="menu-toggle" aria-label="Toggle sidebar">
+			<main class="chat-main" role="main">
+				<header class="chat-topbar" role="banner">
+					<button type="button" id="menuToggle" class="menu-toggle" aria-label="Toggle sidebar menu" aria-expanded="false" title="Toggle navigation">
 						<i class="fas fa-bars"></i>
 					</button>
 					<div class="topbar-info">
-						<div class="topbar-avatar">
-							<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-							</svg>
-						</div>
 						<div class="topbar-text">
 							<h1>Medical AI Assistant</h1>
-							<p>Evidence-guided · Memory Enabled</p>
+							<p>Evidence-based health information</p>
+						</div>
+						<div class="status-badge">
+							<span class="status-dot"></span>
+							Online
 						</div>
 					</div>
 					<div class="topbar-actions">
-						<button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark mode">
+						<button type="button" id="themeToggle" class="theme-toggle-btn" aria-label="Toggle dark mode" title="Toggle dark/light theme" aria-pressed="false">
 							<i class="fas fa-moon" id="themeIcon"></i>
 						</button>
-						<button type="button" id="clearChat" class="clear-btn" aria-label="Clear conversation" title="Clear conversation">
+						<button type="button" id="clearChat" class="clear-btn" aria-label="Clear conversation history and start fresh" title="Clear all messages" hidden>
 							<i class="fas fa-trash-alt"></i>
 						</button>
 					</div>
 				</header>
 
-				<!-- Messages Area -->
-				<div id="messageFormeight" class="messages-area" role="log" aria-live="polite" aria-relevant="additions text">
-					<!-- Welcome Message -->
-					<div class="welcome-card" id="welcomeCard">
-						<div class="welcome-icon">
+				<!-- Messages Container -->
+				<div id="messagesContainer" class="messages-area" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Chat messages">
+					<div class="welcome-card" id="welcomeCard" role="region" aria-label="Welcome message">
+						<div class="welcome-icon" aria-hidden="true">
 							<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 							</svg>
 						</div>
-						<h2>Welcome to MediAssist</h2>
-						<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
-						<div class="welcome-chips">
-							<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
+						<h2>Welcome to MediQuery</h2>
+						<p>Your professional medical AI companion. Ask about symptoms, conditions, treatments, lifestyle changes, and evidence-based health information.</p>
+						<div class="welcome-chips" role="group" aria-label="Suggested questions">
+							<button class="suggestion-chip" data-text="What are the common symptoms of a cold?" type="button">
 								<i class="fas fa-thermometer-half"></i>
-								Cold symptoms
+								<span>Cold symptoms</span>
 							</button>
-							<button class="suggestion-chip" data-query="How can I manage a headache?">
+							<button class="suggestion-chip" data-text="How can I manage a headache effectively?" type="button">
 								<i class="fas fa-head-side-cough"></i>
-								Headache tips
+								<span>Headache tips</span>
 							</button>
-							<button class="suggestion-chip" data-query="What causes high blood pressure?">
+							<button class="suggestion-chip" data-text="What causes high blood pressure and how can it be managed?" type="button">
 								<i class="fas fa-heartbeat"></i>
-								Blood pressure
+								<span>Blood pressure</span>
+							</button>
+							<button class="suggestion-chip" data-text="What are the symptoms and treatment of diabetes?" type="button">
+								<i class="fas fa-syringe"></i>
+								<span>Diabetes</span>
+							</button>
+							<button class="suggestion-chip" data-text="How is asthma diagnosed and treated?" type="button">
+								<i class="fas fa-lungs"></i>
+								<span>Asthma</span>
 							</button>
 						</div>
-						<p class="welcome-disclaimer">
+						<p class="welcome-disclaimer" role="alert">
 							<i class="fas fa-info-circle"></i>
-							This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
+							<span>⚠️ <strong>Disclaimer:</strong> This AI provides informational content only. Always consult qualified healthcare professionals for medical diagnosis, treatment decisions, or emergency situations.</span>
 						</p>
 					</div>
 				</div>
 
-				<!-- Input Area -->
 				<div class="input-area">
-					<form id="messageArea" class="message-composer">
-						<label for="text" class="sr-only">Type your message</label>
+					<form id="messageArea" class="message-composer" role="search" aria-label="Message composer">
+						<label for="text" class="sr-only">Type your question or message</label>
 						<div class="input-wrapper">
-							<input type="text" id="text" name="msg" placeholder="Ask a health question…" autocomplete="off" required/>
-							<button type="submit" id="send" class="send-btn" aria-label="Send message">
+							<input type="text" id="text" name="msg" placeholder="Ask a medical question..." autocomplete="off" required aria-label="Message input field" title="Enter your health question here"/>
+							<button type="submit" id="send" class="send-btn" aria-label="Send message" title="Send your question (Enter)" data-loading="Sending…">
 								<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 									<line x1="22" y1="2" x2="11" y2="13"></line>
 									<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -114,7 +123,7 @@
 							</button>
 						</div>
 					</form>
-					<p class="input-hint">Press Enter to send · Not a substitute for professional medical advice</p>
+					<p class="input-hint" aria-label="Input instructions">For clinical decision support only. Always verify with qualified medical professionals.</p>
 				</div>
 			</main>
 		</div>
@@ -175,8 +184,10 @@
 			}
 
 			function scrollMessagesToBottom() {
-				const container = document.getElementById("messageFormeight");
-				container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				const container = document.getElementById("messagesContainer");
+				setTimeout(() => {
+					container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+				}, 50);
 			}
 
 			function setComposerState(isBusy) {
@@ -188,6 +199,9 @@
 				sendButton.setAttribute("aria-busy", isBusy ? "true" : "false");
 				input.classList.toggle("is-loading", isBusy);
 				sendButton.classList.toggle("is-loading", isBusy);
+				if (!isBusy) {
+					input.focus();
+				}
 			}
 
 			function hideWelcomeCard() {
@@ -211,19 +225,19 @@
 								<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
 							</svg>
 						</div>
-						<div class="message-bubble bot-bubble typing-indicator" aria-live="polite" aria-label="Bot is typing">
+						<div class="message-bubble bot-bubble typing-indicator" aria-live="polite" aria-label="Medical assistant is typing">
 							<span class="typing-dot"></span>
 							<span class="typing-dot"></span>
 							<span class="typing-dot"></span>
 						</div>
 					</div>`;
 
-				$("#messageFormeight").append(typingHtml);
+				$("#messagesContainer").append(typingHtml);
 				scrollMessagesToBottom();
 			}
 
 			function hideTypingIndicator() {
-				$("#typingIndicator").remove();
+				$("#typingIndicator").fadeOut(150, function() { $(this).remove(); });
 			}
 
 			function getTimeString() {
@@ -232,7 +246,10 @@
 			}
 
 			function sendMessage(messageText) {
-				if (!messageText || !messageText.trim()) return;
+				if (!messageText || !messageText.trim()) {
+					alert("Please enter a question before sending.");
+					return;
+				}
 				
 				const str_time = getTimeString();
 				const safeText = escapeHtml(messageText.trim());
@@ -249,7 +266,7 @@
 
 				setComposerState(true);
 				$("#text").val("");
-				$("#messageFormeight").append(userHtml);
+				$("#messagesContainer").append(userHtml);
 				scrollMessagesToBottom();
 				showTypingIndicator();
 
@@ -257,6 +274,7 @@
 					data: { msg: messageText },
 					type: "POST",
 					url: "/get",
+					timeout: 60000
 				}).done(function(data) {
 					hideTypingIndicator();
 					var botHtml = `
@@ -271,11 +289,19 @@
 								<span class="message-time">${str_time}</span>
 							</div>
 						</div>`;
-					$("#messageFormeight").append($.parseHTML(botHtml));
+					$("#messagesContainer").append($.parseHTML(botHtml));
 					setComposerState(false);
 					scrollMessagesToBottom();
-				}).fail(function() {
+				}).fail(function(jqXHR, textStatus, errorThrown) {
 					hideTypingIndicator();
+					
+					let errorMsg = "I couldn't process your request at this moment. Please try again.";
+					if (textStatus === 'timeout') {
+						errorMsg = "The request took too long to process. Please try again with a simpler question.";
+					} else if (textStatus === 'error') {
+						errorMsg = "Server error occurred. Please try again in a moment.";
+					}
+					
 					var errorHtml = `
 						<div class="message-row bot-row">
 							<div class="message-avatar bot-avatar">
@@ -284,123 +310,264 @@
 								</svg>
 							</div>
 							<div class="message-bubble bot-bubble bot-error">
-								I couldn't load a reply just now. Please try again in a moment.
+								<p class="bot-text"><strong>⚠️ Error:</strong> ${escapeHtml(errorMsg)}</p>
 								<span class="message-time">${str_time}</span>
 							</div>
 						</div>`;
-					$("#messageFormeight").append($.parseHTML(errorHtml));
+					$("#messagesContainer").append($.parseHTML(errorHtml));
 					setComposerState(false);
 					scrollMessagesToBottom();
 				});
 			}
 
-			// ── Dark Mode ──────────────────────────────────────
+			// ── New Conversation Button ─────────────────────────────
+			document.getElementById('newChatBtn').addEventListener('click', function() {
+				if (confirm('Start a new conversation? Current chat will be cleared.')) {
+					$.ajax({
+						type: "POST",
+						url: "/clear"
+					}).done(function() {
+						// Clear UI messages
+						$("#messagesContainer").html(`
+							<div class="welcome-card" id="welcomeCard" role="region" aria-label="Welcome message">
+								<div class="welcome-icon" aria-hidden="true">
+									<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+									</svg>
+								</div>
+								<h2>Welcome to MediQuery</h2>
+								<p>Your professional medical AI companion. Ask about symptoms, conditions, treatments, lifestyle changes, and evidence-based health information.</p>
+								<div class="welcome-chips" role="group" aria-label="Suggested questions">
+									<button class="suggestion-chip" data-text="What are the common symptoms of a cold?" type="button">
+										<i class="fas fa-thermometer-half"></i>
+										<span>Cold symptoms</span>
+									</button>
+									<button class="suggestion-chip" data-text="How can I manage a headache effectively?" type="button">
+										<i class="fas fa-head-side-cough"></i>
+										<span>Headache tips</span>
+									</button>
+									<button class="suggestion-chip" data-text="What causes high blood pressure and how can it be managed?" type="button">
+										<i class="fas fa-heartbeat"></i>
+										<span>Blood pressure</span>
+									</button>
+									<button class="suggestion-chip" data-text="What are the symptoms and treatment of diabetes?" type="button">
+										<i class="fas fa-syringe"></i>
+										<span>Diabetes</span>
+									</button>
+									<button class="suggestion-chip" data-text="How is asthma diagnosed and treated?" type="button">
+										<i class="fas fa-lungs"></i>
+										<span>Asthma</span>
+									</button>
+								</div>
+								<p class="welcome-disclaimer" role="alert">
+									<i class="fas fa-info-circle"></i>
+									<span>⚠️ <strong>Disclaimer:</strong> This AI provides informational content only. Always consult qualified healthcare professionals for medical diagnosis, treatment decisions, or emergency situations.</span>
+								</p>
+							</div>`);
+						
+						// Reattach suggestion chip handlers
+						document.querySelectorAll('.suggestion-chip').forEach(chip => {
+							chip.addEventListener('click', () => {
+								const text = chip.getAttribute('data-text') || chip.textContent.trim();
+								messageInput.value = text;
+								messageForm.dispatchEvent(new Event('submit'));
+							});
+						});
+					});
+				}
+			});
+
+			// ── Theme Management ──────────────────────────────────
 			function applyTheme(dark) {
+				const themeIcon = document.getElementById('themeIcon');
 				if (dark) {
 					document.documentElement.setAttribute('data-theme', 'dark');
-					$('#themeIcon').removeClass('fa-moon').addClass('fa-sun');
+					localStorage.setItem('theme', 'dark');
+					themeIcon.className = 'fas fa-sun';
 				} else {
 					document.documentElement.removeAttribute('data-theme');
-					$('#themeIcon').removeClass('fa-sun').addClass('fa-moon');
+					localStorage.setItem('theme', 'light');
+					themeIcon.className = 'fas fa-moon';
 				}
 			}
 
-			// Apply saved preference immediately (before DOM ready)
-			(function() {
-				const saved = localStorage.getItem('mediassist-theme');
-				if (saved === 'dark') {
-					document.documentElement.setAttribute('data-theme', 'dark');
+			const savedTheme = localStorage.getItem('theme');
+			applyTheme(savedTheme === 'dark');
+
+			document.getElementById('themeToggle').addEventListener('click', () => {
+				const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+				applyTheme(!isDark);
+			});
+
+			// ── Mobile Menu Toggle ───────────────────────────────
+			const menuToggle = document.getElementById('menuToggle');
+			const sidebar = document.querySelector('.sidebar');
+			
+			menuToggle.addEventListener('click', () => {
+				sidebar.classList.toggle('open');
+				const isOpen = sidebar.classList.contains('open');
+				menuToggle.setAttribute('aria-expanded', isOpen);
+			});
+
+			// Close sidebar when clicking outside on mobile
+			document.addEventListener('click', (e) => {
+				if (window.innerWidth <= 820) {
+					if (!sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+						sidebar.classList.remove('open');
+						menuToggle.setAttribute('aria-expanded', 'false');
+					}
 				}
-			})();
+			});
 
-			$(document).ready(function() {
-				// Restore icon state on load
-				const savedTheme = localStorage.getItem('mediassist-theme');
-				applyTheme(savedTheme === 'dark');
+			// ── Form Submission ──────────────────────────────────
+			const messageForm = document.getElementById('messageArea');
+			const messageInput = document.getElementById('text');
 
-				// Toggle handler
-				$("#themeToggle").on("click", function() {
-					const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-					const newTheme = !isDark;
-					applyTheme(newTheme);
-					localStorage.setItem('mediassist-theme', newTheme ? 'dark' : 'light');
-				});
+			messageForm.addEventListener('submit', (e) => {
+				e.preventDefault();
+				const message = messageInput.value.trim();
+				if (message) {
+					sendMessage(message);
+				}
+			});
 
-				// Sidebar toggle
-				$("#menuToggle").on("click", function() {
-					$("#sidebar").toggleClass("open");
-				});
+			// Allow Enter key to submit
+			messageInput.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					messageForm.dispatchEvent(new Event('submit'));
+				}
+			});
 
-				// Close sidebar on outside click (mobile)
-				$(".chat-main").on("click", function() {
-					if (window.innerWidth <= 768) {
-						$("#sidebar").removeClass("open");
-					}
-				});
+			// Send button click handler
+			document.getElementById('send').addEventListener('click', (e) => {
+				e.preventDefault();
+				messageForm.dispatchEvent(new Event('submit'));
+			});
 
-				// Clear chat
-				$("#clearChat, #newChatBtn").on("click", function() {
-					if ($("#messageFormeight").children().length <= 1 && document.getElementById("welcomeCard")) {
-						return; // Nothing to clear
-					}
-					if (confirm("Start a new conversation?")) {
-						$.ajax({
-							type: "POST",
-							url: "/clear",
-						}).done(function() {
-							$("#messageFormeight").empty();
-							// Re-add welcome card
-							const welcomeHtml = `
-								<div class="welcome-card" id="welcomeCard">
-									<div class="welcome-icon">
-										<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-											<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
-										</svg>
-									</div>
-									<h2>Welcome to MediAssist</h2>
-									<p>I'm your medical AI companion. Ask me about symptoms, conditions, treatments, or any health-related topic.</p>
-									<div class="welcome-chips">
-										<button class="suggestion-chip" data-query="What are the common symptoms of a cold?">
-											<i class="fas fa-thermometer-half"></i>
-											Cold symptoms
-										</button>
-										<button class="suggestion-chip" data-query="How can I manage a headache?">
-											<i class="fas fa-head-side-cough"></i>
-											Headache tips
-										</button>
-										<button class="suggestion-chip" data-query="What causes high blood pressure?">
-											<i class="fas fa-heartbeat"></i>
-											Blood pressure
-										</button>
-									</div>
-									<p class="welcome-disclaimer">
-										<i class="fas fa-info-circle"></i>
-										This is an AI assistant for informational purposes only. Always consult a healthcare professional for medical advice.
-									</p>
-								</div>`;
-							$("#messageFormeight").append(welcomeHtml);
-						}).fail(function() {
-							alert("Failed to clear conversation. Please try again.");
-						});
-					}
-				});
-
-				// Suggestion chips
-				$(document).on("click", ".suggestion-chip", function() {
-					const query = $(this).data("query");
-					if (query) {
-						sendMessage(query);
-					}
-				});
-
-				// Send message
-				$("#messageArea").on("submit", function(event) {
-					event.preventDefault();
-					const rawText = $("#text").val();
-					sendMessage(rawText);
+			// Suggestion chips click handlers
+			document.querySelectorAll('.suggestion-chip').forEach(chip => {
+				chip.addEventListener('click', () => {
+					const text = chip.getAttribute('data-text') || chip.textContent.trim();
+					messageInput.value = text;
+					messageForm.dispatchEvent(new Event('submit'));
 				});
 			});
+
+			// ── Help Modal ───────────────────────────────────────
+			document.addEventListener('DOMContentLoaded', () => {
+				const helpBtn = document.getElementById('helpBtn');
+				const helpModal = document.getElementById('helpModal');
+				const closeHelpBtn = document.getElementById('closeHelpBtn');
+
+				if (helpBtn && helpModal && closeHelpBtn) {
+					helpBtn.addEventListener('click', () => {
+						helpModal.style.display = 'flex';
+					});
+
+					closeHelpBtn.addEventListener('click', () => {
+						helpModal.style.display = 'none';
+					});
+
+					helpModal.addEventListener('click', (e) => {
+						if (e.target === helpModal) {
+							helpModal.style.display = 'none';
+						}
+					});
+				}
+			});
 		</script>
+
+		<!-- Help Modal -->
+		<div id="helpModal" class="help-modal">
+			<div class="help-modal-content">
+				<div class="help-modal-header">
+					<h2><i class="fas fa-info-circle"></i> About MediQuery</h2>
+					<button id="closeHelpBtn" class="close-help-btn" aria-label="Close help" onclick="document.getElementById('helpModal').style.display='none'">
+						<i class="fas fa-times"></i>
+					</button>
+				</div>
+				<div class="help-modal-body">
+
+					<section class="help-section">
+						<h3><i class="fas fa-robot"></i> What is MediQuery?</h3>
+						<p>MediQuery is an <strong>AI-powered Medical Chatbot</strong> that answers health questions using a verified medical knowledge base. It uses a Retrieval-Augmented Generation (RAG) pipeline — retrieving relevant passages from medical documents before generating a grounded, evidence-based response.</p>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-book-medical"></i> Knowledge Base</h3>
+						<ul>
+							<li><strong>Source:</strong> Gale Encyclopedia of Medicine (Medical_book.pdf)</li>
+							<li><strong>Topics:</strong> Diseases, symptoms, causes, treatments, prevention, complications, diagnostics</li>
+							<li><strong>Chunking:</strong> Hybrid token-aware chunking — section metadata + semantic sentence boundaries (avg ~74 tokens/chunk)</li>
+							<li><strong>Embeddings:</strong> BAAI/bge-small-en-v1.5 (384-dim, retrieval-optimised)</li>
+							<li><strong>Vector DB:</strong> Pinecone (8,845 indexed chunks)</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-project-diagram"></i> Retrieval Pipeline</h3>
+						<ul>
+							<li><strong>Stage 1 — Recall:</strong> Hybrid BM25 (exact term matching) + MMR dense retrieval (semantic diversity), weighted 40/60</li>
+							<li><strong>Stage 2 — Precision:</strong> Cross-Encoder reranker (ms-marco-MiniLM-L-6-v2) keeps top 8 most relevant chunks</li>
+							<li><strong>Metadata filtering:</strong> Query intent is detected (symptoms / causes / treatment / diagnosis / prevention / complications) and Pinecone is filtered to matching sections before retrieval</li>
+							<li><strong>Query rewriting:</strong> llama-3.1-8b-instant rewrites your query for optimal search — resolves pronouns, fixes typos, removes filler words</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-brain"></i> AI Models</h3>
+						<ul>
+							<li><strong>Answer generation:</strong> Llama 3.3 70B Versatile (via Groq) — high-quality medical reasoning</li>
+							<li><strong>Query rewriting:</strong> Llama 3.1 8B Instant (via Groq) — fast, lightweight query optimisation</li>
+							<li><strong>Reranker:</strong> cross-encoder/ms-marco-MiniLM-L-6-v2 (local CPU inference)</li>
+							<li><strong>Embeddings:</strong> BAAI/bge-small-en-v1.5 (local CPU inference)</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-lightbulb"></i> How to Use</h3>
+						<ol>
+							<li><strong>Ask naturally:</strong> Type any health question — typos and informal phrasing are handled automatically</li>
+							<li><strong>Be specific:</strong> Mention the condition, symptom, or topic for more focused answers</li>
+							<li><strong>Follow up:</strong> The bot remembers the last 3 exchanges for pronoun resolution and context</li>
+							<li><strong>New chat:</strong> Click "New conversation" in the sidebar or the trash icon to reset</li>
+							<li><strong>Dark mode:</strong> Toggle with the moon/sun icon in the top bar</li>
+						</ol>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-exclamation-triangle"></i> Important Disclaimer</h3>
+						<div class="help-warning">
+							<p><strong>This AI provides informational content ONLY.</strong></p>
+							<ul>
+								<li>Always consult a qualified healthcare professional for diagnosis and treatment</li>
+								<li>For emergencies, call 911 or your local emergency number immediately</li>
+								<li>Responses are grounded in the indexed knowledge base — information may not cover all conditions or latest guidelines</li>
+								<li>Not a substitute for professional medical advice, diagnosis, or treatment</li>
+							</ul>
+						</div>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-shield-alt"></i> Privacy & Security</h3>
+						<ul>
+							<li>Conversations are processed via Groq's secure API infrastructure</li>
+							<li>Session memory is stored in your browser session only — not persisted to any database</li>
+							<li>History is capped at 20 messages per session to prevent data accumulation</li>
+							<li>No personal medical data is stored or shared with third parties</li>
+						</ul>
+					</section>
+
+					<section class="help-section">
+						<h3><i class="fas fa-envelope"></i> About</h3>
+						<p>Developed by <strong>Kinza</strong></p>
+						<p>Stack: Python · Flask · LangChain · Pinecone · Groq · PyMuPDF · NLTK · tiktoken</p>
+					</section>
+
+				</div>
+			</div>
+		</div>
         
     </body>
 </html>

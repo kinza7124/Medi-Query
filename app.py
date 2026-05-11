@@ -3,13 +3,8 @@ import re
 import threading
 import uuid
 
-<<<<<<< HEAD
-from flask import Flask, render_template, request, session
-from src.helper import download_hugging_face_embeddings, chunk_pdf_dir
-=======
 from flask import Flask, render_template, request, session, jsonify
-from src.helper import download_hugging_face_embeddings
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
+from src.helper import download_hugging_face_embeddings, chunk_pdf_dir
 from langchain_pinecone import PineconeVectorStore
 from langchain_groq import ChatGroq
 from langchain.retrievers import ContextualCompressionRetriever, EnsembleRetriever
@@ -28,7 +23,6 @@ from src.prompt import system_prompt, query_rewrite_system_prompt
 import logging
 import os
 
-<<<<<<< HEAD
 # ── Logging ────────────────────────────────────────────────────────────────
 import sys
 
@@ -38,17 +32,6 @@ try:
     _stream_handler.stream.reconfigure(encoding="utf-8", errors="replace")
 except AttributeError:
     pass  # Python < 3.7 fallback
-
-=======
-# Optional: Import improved retrieval (available if installed)
-try:
-    from improved_retrieval import AdvancedRetriever, QueryExpander
-    ADVANCED_RETRIEVAL_AVAILABLE = True
-except ImportError:
-    ADVANCED_RETRIEVAL_AVAILABLE = False
-
-# Configure production-ready logging
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -59,6 +42,10 @@ logger = logging.getLogger(__name__)
 # Temporary response cache to recover answers when the browser/proxy times out
 # before the backend returns the final payload.
 COMPLETED_RESPONSE_CACHE = {}
+
+# Feature availability flags
+ADVANCED_RETRIEVAL_AVAILABLE = True
+
 
 # ─── Configuration ────────────────────────────────────────────────
 # Set to True to use advanced retrieval with hybrid search & query expansion
@@ -83,14 +70,11 @@ GROQ_API_KEY     = os.environ.get('GROQ_API_KEY')
 if not PINECONE_API_KEY or not GROQ_API_KEY:
     logger.error("Missing critical API keys in environment variables!")
 
-<<<<<<< HEAD
 os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
 os.environ["GROQ_API_KEY"]     = GROQ_API_KEY
-=======
-os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY or ""
-os.environ["GROQ_API_KEY"] = GROQ_API_KEY or ""
 
-MAX_QUERY_LENGTH = 500
+_MAX_QUERY_LENGTH = 500
+MAX_QUERY_LENGTH = _MAX_QUERY_LENGTH  # alias used in validate_user_input
 _UNSAFE_QUERY_PATTERN = re.compile(
     r"(<\s*/?\s*script\b|javascript:|on\w+\s*=|<\s*img\b|<\s*iframe\b)",
     flags=re.IGNORECASE,
@@ -100,7 +84,6 @@ _EMERGENCY_QUERY_PATTERN = re.compile(
     r"unconscious|fainting|severe bleeding|overdose|poisoning|suicidal|heart attack)\b",
     flags=re.IGNORECASE,
 )
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 # Issue 2 fix: extractor is powerful but adds N LLM calls per query (one per
 # reranked chunk). Gate it behind an env flag so production stays fast by
@@ -137,7 +120,6 @@ def get_docsearch():
 
 
 @lru_cache(maxsize=1)
-<<<<<<< HEAD
 def get_chunks():
     """
     Parse PDFs once (single fitz.open via chunk_pdf_dir) and cache chunks.
@@ -196,13 +178,6 @@ def get_compressor_pipeline():
     reranker = CrossEncoderReranker(
         model=HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"),
         top_n=8,
-=======
-def get_retriever():
-    docsearch = get_docsearch()
-    base_retriever = docsearch.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": 10, "fetch_k": 30, "lambda_mult": 0.5},
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
     )
 
     if ENABLE_EXTRACTOR:
@@ -247,100 +222,19 @@ def get_retriever():
 
 
 @lru_cache(maxsize=1)
-<<<<<<< HEAD
 def get_llm():
     """Single LLM instance shared by the RAG chain."""
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
-=======
-def get_advanced_retriever():
-    """Get advanced retriever with hybrid search and reranking"""
-    if not ADVANCED_RETRIEVAL_AVAILABLE:
-        logger.warning("Advanced retriever not available, falling back to standard retriever")
-        return None
-
-    try:
-        embeddings = get_embeddings()
-        llm = ChatGroq(model="llama-3.3-70b-versatile")
-
-        advanced_retriever = AdvancedRetriever(
-            embeddings=embeddings,
-            llm=llm,
-            index_name="medical-chatbot"
-        )
-        logger.info("Advanced retriever initialized")
-        return advanced_retriever
-    except Exception as e:
-        logger.error(f"Failed to initialize advanced retriever: {e}")
-        return None
-
-
-def retrieve_with_enhancements(query: str, use_advanced: bool = None) -> list:
-    """
-    Retrieve documents with optional enhancements
-
-    Args:
-        query: Search query
-        use_advanced: Use advanced retrieval (defaults to USE_ADVANCED_RETRIEVAL config)
-
-    Returns:
-        List of retrieved documents
-    """
-    use_advanced = use_advanced or USE_ADVANCED_RETRIEVAL
-
-    if use_advanced:
-        try:
-            advanced_retriever = get_advanced_retriever()
-            if advanced_retriever:
-                docs = advanced_retriever.retrieve_with_expansion(
-                    query=query,
-                    use_expansion=USE_QUERY_EXPANSION,
-                    use_hybrid=True,
-                    use_reranking=True,
-                    top_n=5
-                )
-                logger.info(f"Advanced retrieval: Retrieved {len(docs)} documents")
-                return docs
-        except Exception as e:
-            logger.error(f"Advanced retrieval failed, fallback to standard: {e}")
-
-    # Standard retrieval fallback
-    retriever = get_retriever()
-    docs = retriever.invoke(query)
-    logger.info(f"Standard retrieval: Retrieved {len(docs)} documents")
-    return docs
-
-
-@lru_cache(maxsize=1)
-def get_chat_model():
-    return ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-
-
-@lru_cache(maxsize=1)
-def get_fallback_chat_model():
-    # Keep fallback responses compact to reduce drift and improve structure quality.
-    return ChatGroq(model="llama-3.1-8b-instant", temperature=0, max_tokens=420)
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 
 @lru_cache(maxsize=1)
 def get_query_rewrite_chain():
-<<<<<<< HEAD
     rewrite_llm    = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
     rewrite_prompt = ChatPromptTemplate.from_messages([
         ("system", query_rewrite_system_prompt),
         ("human", "Chat history:\n{chat_history}\n\nUser query: {question}"),
     ])
     return rewrite_prompt | rewrite_llm | StrOutputParser()
-=======
-    query_rewrite_model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-    query_rewrite_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", query_rewrite_system_prompt),
-            ("human", "Chat history:\n{chat_history}\n\nUser query: {question}"),
-        ]
-    )
-    return query_rewrite_prompt | query_rewrite_model | StrOutputParser()
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 
 # ── Metadata-aware retrieval ───────────────────────────────────────────────
@@ -560,7 +454,6 @@ def update_session_memory(user_query: str, assistant_answer: str):
         session['chat_history'] = []
     session['chat_history'].append({"role": "user",      "content": user_query})
     session['chat_history'].append({"role": "assistant", "content": assistant_answer})
-<<<<<<< HEAD
     # Keep only the most recent N messages
     session['chat_history'] = session['chat_history'][-MAX_HISTORY_MESSAGES:]
     session.modified = True
@@ -572,31 +465,11 @@ def format_chat_history(history: list) -> str:
         return "No previous conversation."
     formatted = []
     for msg in history[-6:]:
-=======
-    # Limit chat history stored in the session cookie to avoid oversize cookie problems.
-    # Keep only the most recent N messages (user+assistant entries count separately).
-    MAX_SESSION_MESSAGES = 12
-    try:
-        session['chat_history'] = session['chat_history'][-MAX_SESSION_MESSAGES:]
-    except Exception:
-        # If anything goes wrong, fall back to a safe empty history.
-        session['chat_history'] = []
-    session.modified = True
-
-
-def format_chat_history(history: list, max_messages: int = 10) -> str:
-    """Format chat history list into a string for the prompt."""
-    if not history:
-        return "No previous conversation."
-    formatted = []
-    for msg in history[-max_messages:]:
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
         role = "User" if msg["role"] == "user" else "Assistant"
         formatted.append(f"{role}: {msg['content']}")
     return "\n".join(formatted)
 
 
-<<<<<<< HEAD
 def format_rewrite_history(history: list) -> str:
     """
     Format ONLY the last 1 exchange (2 messages) for the query rewriter.
@@ -618,10 +491,6 @@ def format_rewrite_history(history: list) -> str:
         formatted.append(f"{role}: {content}")
     return "\n".join(formatted)
 
-=======
-def format_docs(docs: list) -> str:
-    """Format retrieved documents into a context string."""
-    return "\n\n".join(doc.page_content for doc in docs)
 
 def has_ambiguous_pronoun(text: str) -> bool:
     return bool(re.search(r"\b(it|this|that|its|they|them|their|these|those)\b", text, re.IGNORECASE))
@@ -856,7 +725,7 @@ def _build_rag_chain(llm, strict_structure: bool = False):
                     concise_chunks.append(text[:520])
             context = "\n\n".join(concise_chunks)
         else:
-            context = format_docs(context_docs)
+            context = _format_docs(context_docs)
 
         # Use the original user question for the answer prompt, NOT the rewritten search query
         question = input_dict.get("input", "")
@@ -908,18 +777,17 @@ def _build_rag_chain(llm, strict_structure: bool = False):
     )
 
     return chain
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 # ── Query rewriting ────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=1)
 def get_rag_chain():
-    return _build_rag_chain(get_chat_model(), strict_structure=False)
+    return _build_rag_chain(get_llm(), strict_structure=False)
 
 
 @lru_cache(maxsize=1)
 def get_rag_chain_fallback():
-    return _build_rag_chain(get_fallback_chat_model(), strict_structure=True)
+    return _build_rag_chain(get_llm(), strict_structure=True)
 
 
 def is_rate_limit_error(error: Exception) -> bool:
@@ -955,7 +823,6 @@ def get_greeting_response(user_query: str) -> str | None:
     return None
 
 
-<<<<<<< HEAD
 def _extract_rewritten_query(raw: str, original: str) -> str:
     """
     Strip chain-of-thought reasoning from the rewrite model output.
@@ -999,23 +866,6 @@ def _extract_rewritten_query(raw: str, original: str) -> str:
     return original
 
 
-def rewrite_query_for_retrieval(user_query: str, chat_history_str: str = "") -> str:
-    cleaned = user_query.strip()
-    if not cleaned or is_greeting_or_personal_question(cleaned):
-        return cleaned
-    try:
-        raw = get_query_rewrite_chain().invoke({
-            "question":     cleaned,
-            "chat_history": chat_history_str or "No previous conversation.",
-        }).strip()
-        rewritten = _extract_rewritten_query(raw, cleaned)
-        if rewritten and rewritten != cleaned:
-            logger.info(f"Query rewrite: '{cleaned}' -> '{rewritten}'")
-        return rewritten
-    except Exception as e:
-        logger.warning(f"Query rewrite failed, using original: {e}")
-    return cleaned
-=======
 def rewrite_query_for_retrieval(user_query: str, chat_history: list = None, current_topic: str = "") -> str:
     cleaned_query = user_query.strip()
     if not cleaned_query:
@@ -1030,7 +880,7 @@ def rewrite_query_for_retrieval(user_query: str, chat_history: list = None, curr
         if isinstance(history, str):
             history = [{"role": "user", "content": history}]
         # Rewrite uses only the most recent turn context to avoid topic drift.
-        current_history = format_chat_history(history, max_messages=2)
+        current_history = format_rewrite_history(history)
         recent_topic = current_topic or get_recent_topic(history)
         normalized_query = normalize_informal_query(cleaned_query)
         query_for_rewrite = normalized_query
@@ -1058,49 +908,10 @@ def rewrite_query_for_retrieval(user_query: str, chat_history: list = None, curr
             return rewritten_query
     except Exception as rewrite_error:
         print(f"Query rewrite failed, falling back to original query: {rewrite_error}")
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
+    return cleaned_query
 
 
 # ── Answer post-processing ─────────────────────────────────────────────────
-
-@lru_cache(maxsize=1)
-def get_query_expander():
-    """Get query expander for advanced retrieval"""
-    if not ADVANCED_RETRIEVAL_AVAILABLE:
-        return None
-
-    try:
-        llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
-        return QueryExpander(llm)
-    except Exception as e:
-        logger.warning(f"Failed to initialize query expander: {e}")
-        return None
-
-
-def expand_query_for_coverage(user_query: str) -> list:
-    """
-    Generate multiple query formulations for better retrieval coverage
-
-    Args:
-        user_query: Original user query
-
-    Returns:
-        List of expanded queries (including original)
-    """
-    if not USE_QUERY_EXPANSION:
-        return [user_query]
-
-    try:
-        expander = get_query_expander()
-        if expander:
-            expanded = expander.expand_query(user_query)
-            logger.info(f"Query expansion: Generated {len(expanded)} query formulations")
-            return expanded
-    except Exception as e:
-        logger.warning(f"Query expansion failed: {e}")
-
-    return [user_query]
-
 
 def extract_subject_from_question(user_query: str) -> str:
     patterns = [
@@ -1284,17 +1095,8 @@ def format_answer_for_readability(user_query: str, answer_text: str) -> str:
         user_query, re.IGNORECASE,
     ))
 
-<<<<<<< HEAD
     # Normalise bullet markers to "- "
     formatted = re.sub(r"(?m)^\s*[•·\*]\s+", "- ", formatted)
-=======
-    # Normalize common list markers into consistent bullet lines.
-    formatted = re.sub(r"(?m)^\s*[\*\u2022]\s+", "- ", formatted)
-    formatted = re.sub(r"(?m)^\s*\d+[\.)]\s+", "- ", formatted)
-    formatted = re.sub(r"(^|\s)\*\s+", r"\n- ", formatted)
-    formatted = re.sub(r"\s+-\s+(?=[A-Za-z])", "\n- ", formatted)
-    formatted = re.sub(r"(?m)^\s*\d+\.\s*$", "", formatted)
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
     formatted = re.sub(r"\n{3,}", "\n\n", formatted)
     formatted = formatted.lstrip("\n")
 
@@ -1582,15 +1384,7 @@ def health():
 
 @app.route("/clear", methods=["POST"])
 def clear_chat():
-<<<<<<< HEAD
     session['chat_history'] = []
-=======
-    """Clear the conversation history for the current session."""
-    if 'chat_history' in session:
-        session['chat_history'] = []
-    if 'current_topic' in session:
-        session['current_topic'] = ''
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
     session.modified = True
     return "Conversation history cleared."
 
@@ -1619,7 +1413,6 @@ def chat():
     user_query = validation_result
 
     get_session_memory()
-<<<<<<< HEAD
     history = session.get('chat_history', [])
 
     # Full history for answer generation (last 3 exchanges = 6 messages)
@@ -1649,101 +1442,6 @@ def chat():
 
         update_session_memory(user_query, final_answer)
         logger.info("Response generated successfully.")
-=======
-    chat_history = session.get('chat_history', [])
-    current_topic = session.get('current_topic', '')
-    chat_history_str = format_chat_history(chat_history)
-
-    # Check for greeting/personal questions first
-    greeting_response = get_greeting_response(user_query)
-    if greeting_response:
-        update_session_memory(user_query, greeting_response)
-        if request_id:
-            COMPLETED_RESPONSE_CACHE[request_id] = greeting_response
-        return greeting_response
-
-    retrieval_query = rewrite_query_for_retrieval(user_query, chat_history, current_topic=current_topic)
-
-    detected_topic = infer_topic_from_query(user_query)
-    if detected_topic:
-        session['current_topic'] = detected_topic
-        session.modified = True
-    elif has_ambiguous_pronoun(user_query) and current_topic:
-        # Keep known topic for pronoun-only follow-ups.
-        session['current_topic'] = current_topic
-        session.modified = True
-
-    logger.info(f"User query: '{user_query}' | Rewritten: '{retrieval_query}'")
-    logger.debug(f"Session current_topic (before call): {session.get('current_topic','')}" )
-    logger.debug(f"Detected topic: {detected_topic}")
-    logger.debug(f"Retrieval query: {retrieval_query}")
-    try:
-        logger.debug(f"Chat history (truncated): {chat_history[-6:]}" )
-    except Exception:
-        logger.debug("Chat history unavailable or not list-like")
-
-    try:
-        request_payload = {
-            "input": user_query,                 # Original question → shown to the LLM
-            "retrieval_query": retrieval_query,  # Optimized query → used for vector search
-            "chat_history": chat_history_str,
-            "topic_reference": session.get('current_topic', '')
-        }
-
-        fallback_payload = {
-            "input": user_query,
-            "retrieval_query": retrieval_query,
-            # Use shorter history for 3.1 fallback to avoid oversized prompts.
-            "chat_history": format_chat_history(chat_history, max_messages=2),
-            "topic_reference": session.get('current_topic', '')
-        }
-
-        # Pass BOTH the original user question (for the answer prompt)
-        # and the rewritten query (for retrieval/search only)
-        try:
-            final_answer = get_rag_chain().invoke(request_payload)
-        except Exception as primary_error:
-            if is_rate_limit_error(primary_error):
-                logger.warning("Primary model rate-limited. Retrying with fallback model.")
-                final_answer = get_rag_chain_fallback().invoke(fallback_payload)
-            else:
-                raise
-
-        final_answer = clean_answer_text(user_query, str(final_answer))
-        final_answer = format_answer_for_readability(user_query, final_answer)
-        final_answer = dedupe_repeated_lines(final_answer)
-        final_answer = strip_meta_instruction_leakage(final_answer)
-        if looks_unstructured_or_noisy(final_answer):
-            final_answer = enforce_compact_structure(user_query, final_answer)
-        final_answer = stabilize_medication_answer(user_query, final_answer)
-        final_answer = append_clinical_safety_note(user_query, final_answer)
-        if detect_emergency_keywords(user_query):
-            final_answer = (
-                f"{final_answer}\n\n"
-                "This may be an emergency. Call local emergency services immediately or go to the nearest emergency department."
-            )
-        final_answer = move_disclaimer_to_end(final_answer)
-        # If the user used a pronoun (e.g., "it", "that") ensure the response
-        # explicitly references the previous topic so it's clear what "it" refers to.
-        try:
-            if has_ambiguous_pronoun(user_query):
-                recent_topic = current_topic or get_recent_topic(chat_history)
-                if recent_topic:
-                    # If the response doesn't already mention the recent topic, prepend a short reference.
-                    if not re.search(r"\b" + re.escape(recent_topic) + r"\b", final_answer, flags=re.IGNORECASE):
-                        final_answer = f"Referring to your earlier question about {recent_topic}:\n\n" + final_answer
-        except Exception:
-            # Keep going even if reference enrichment fails
-            pass
-
-        # Save to memory
-        update_session_memory(user_query, final_answer)
-
-        if request_id:
-            COMPLETED_RESPONSE_CACHE[request_id] = final_answer
-
-        logger.info("Successfully generated response.")
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
         return final_answer
 
 
@@ -1781,7 +1479,4 @@ def preload_models():
 if __name__ == '__main__':
     preload_models()
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
-<<<<<<< HEAD
 
-=======
->>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce

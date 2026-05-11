@@ -57,8 +57,13 @@ This project implements an intelligent **Medical AI Chatbot** using **Retrieval-
 | **RAG Pipeline** | LangChain + Pinecone + Groq | ✅ Complete |
 | **Query Rewriting** | LLM-based with pronoun resolution | ✅ Complete |
 | **Conversation Memory** | Flask sessions, last 10 exchanges | ✅ Complete |
+<<<<<<< HEAD
 | **Document Retrieval** | Hybrid BM25 + Dense + Cross-Encoder reranking | ✅ Complete |
 | **Safety Protocols** | Medical disclaimers (enforced at end), emergency detection | ✅ Complete |
+=======
+| **Document Retrieval** | MMR + Cross-Encoder reranking | ✅ Complete |
+| **Safety Protocols** | Medical disclaimers, emergency detection | ✅ Complete |
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 | **Context Abstention** | No hallucination when context missing | ✅ Complete |
 | **Greeting Handling** | Separate handler for non-medical queries | ✅ Complete |
 | **Glassmorphic UI** | CSS3 with blur effects and animations | ✅ Complete |
@@ -82,10 +87,17 @@ This project implements an intelligent **Medical AI Chatbot** using **Retrieval-
 |-----------|----------------|--------|
 | **Model Caching** | `@lru_cache` on model loaders | Eliminates reload overhead |
 | **Preloading** | Models loaded at startup | Prevents cold-start latency |
+<<<<<<< HEAD
 | **Contextual Compression** | Cross-encoder reranking (top 6-8) | Reduces LLM token usage |
 | **Hybrid Retrieval** | BM25 + Dense ensemble (k=10) | Balances keyword + semantic matching |
 | **Session Memory** | Last 10 exchanges stored | Enables contextual follow-ups |
 | **Response Restructuring** | Auto-moves disclaimers to end | Cleaner, professional format |
+=======
+| **Contextual Compression** | Cross-encoder reranking (top 4) | Reduces LLM token usage |
+| **MMR Retrieval** | Diverse initial retrieval (k=10) | Balances relevance/diversity |
+| **Session Memory** | Last 10 exchanges stored | Enables contextual follow-ups |
+| **Async UI** | Typing indicators | Better UX during processing |
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 ### 3.2 RAGAS Evaluation Results (Actual)
 
@@ -95,8 +107,13 @@ This project implements an intelligent **Medical AI Chatbot** using **Retrieval-
 |--------|-------|--------|-------------|
 | **Answer Relevancy** | **92.36%** | ✅ Excellent | Responses highly relevant to questions |
 | **Context Recall** | **66.67%** | ⚠️ Moderate | Retrieved 2/3 of relevant documents |
+<<<<<<< HEAD
 | **Context Precision** | **70%+** | ✅ Improved | Hybrid retrieval reduces noise |
 | **Faithfulness** | **75%+** | ✅ Improved | Strict context-only prompt enforcement |
+=======
+| **Context Precision** | **55.56%** | ⚠️ Needs Work | Some noise in retrieved context |
+| **Faithfulness** | **0.00%** | ❌ Critical | Answers not strictly context-bound |
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 **Raw RAGAS Output:**
 ```
@@ -126,12 +143,19 @@ context_recall: 0.6667
 - Faithfulness: 0.00% - LLM may be using knowledge beyond retrieved context
 - Context Precision: 55.56% - Retrieved context contains some irrelevant documents
 
+<<<<<<< HEAD
 **✅ Fixes Applied:**
 1. ✅ Strengthened system prompt with strict context-only enforcement
 2. ✅ Implemented hybrid BM25 + Dense retrieval for better precision
 3. ✅ Added response restructuring to move disclaimers to end automatically
 4. ✅ Increased frontend timeout to 60s for model loading
 5. ✅ Added background model preloading on startup
+=======
+**🔧 Recommended Fixes:**
+1. Strengthen system prompt to enforce strict context-only answers
+2. Adjust MMR `lambda_mult` parameter to prioritize precision over diversity
+3. Consider increasing cross-encoder reranker threshold
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 ---
 
@@ -390,11 +414,17 @@ http://localhost:8080
 
 4. **Safety-First Design**: Medical disclaimers and emergency symptom detection built-in.
 
+<<<<<<< HEAD
 5. **Production-Ready Architecture**: Model caching, background preloading, error handling, and security measures implemented.
 
 6. **Response Structure Enforcement**: Automatic detection and repositioning of disclaimers to the end of responses.
 
 7. **Comprehensive Documentation**: IEEE SRS, testing docs, and test suite for academic evaluation.
+=======
+5. **Production-Ready Architecture**: Model caching, error handling, logging, and security measures implemented.
+
+6. **Comprehensive Documentation**: IEEE SRS, testing docs, and test suite for academic evaluation.
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 7. **CI/CD Pipeline**: GitHub Actions workflow with automated Docker builds and AWS ECR/EC2 deployment.
 

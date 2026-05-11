@@ -5,6 +5,10 @@
 
 **Document Version:** 1.0  
 **Date:** April 29, 2026  
+<<<<<<< HEAD
+=======
+**Author:** Kinza  
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 **Project:** Medical AI Chatbot - Conversational Health Assistant with RAG  
 **Format:** IEEE 830-1998 Standard
 
@@ -33,10 +37,17 @@ A **Retrieval-Augmented Generation (RAG)** based Medical AI Chatbot that:
 - Deploys via CI/CD pipeline to AWS cloud for scalable, reliable access
 
 **Benefits:**
+<<<<<<< HEAD
 - **92% accuracy** vs 65% for non-RAG systems
 - **5% hallucination rate** vs 35% for generic LLMs
 - Context-aware follow-up handling with **88% context relevance**
 - Cloud-deployed with automated CI/CD for continuous updates
+=======
+- Latest quota-safe evaluation shows **Precision@1 = 0.60**, **Precision@5 = 0.50**, **Recall@5 = 0.67**, **MRR = 0.70**, and **NDCG@5 = 0.62**
+- Answer similarity in the latest evaluation is **Semantic Similarity = 0.74**, with **BLEU = 0.16** and **ROUGE-L = 0.15**
+- Production hardening includes **Gunicorn**, a `/health` endpoint, environment-based secrets, and Docker deployment
+- The evaluation pipeline now supports quota-safe execution when Groq limits are reached
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 ### 1.3 Scope
 The Medical AI Chatbot shall:
@@ -53,7 +64,11 @@ The Medical AI Chatbot shall:
 - Integration with Electronic Health Records (EHR)
 - Real-time doctor consultation features
 
+<<<<<<< HEAD
 ### 1.3 Definitions and Acronyms
+=======
+### 1.4 Definitions and Acronyms
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 | Term | Definition |
 |------|------------|
@@ -66,14 +81,22 @@ The Medical AI Chatbot shall:
 | **LangChain** | Framework for developing applications powered by language models |
 | **Contextual Compression** | Technique to filter and rank retrieved documents by relevance |
 
+<<<<<<< HEAD
 ### 1.4 References
+=======
+### 1.5 References
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 1. IEEE Std 830-1998, IEEE Recommended Practice for Software Requirements Specifications
 2. LangChain Documentation, https://python.langchain.com/
 3. Pinecone Vector Database Documentation, https://docs.pinecone.io/
 4. Groq API Documentation, https://console.groq.com/docs
 5. Flask Web Framework Documentation, https://flask.palletsprojects.com/
 
+<<<<<<< HEAD
 ### 1.5 Overview
+=======
+### 1.6 Overview
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 This document is organized as follows:
 - Section 2: Overall System Description
 - Section 3: Specific Requirements (Functional and Non-Functional)
@@ -87,6 +110,7 @@ This document is organized as follows:
 ### 2.1 Product Perspective
 The Medical AI Chatbot is a standalone web application built on a client-server architecture. It integrates multiple external services and follows a microservices-inspired design pattern.
 
+<<<<<<< HEAD
 **System Context Diagram:**
 ```
 [User Browser] <--HTTP--> [Flask Web Server] <--API--> [Groq LLM]
@@ -96,6 +120,8 @@ The Medical AI Chatbot is a standalone web application built on a client-server 
                                 |<--Local--> [HuggingFace Embeddings]
 ```
 
+=======
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 ### 2.2 Product Functions
 1. **Query Processing**: Accept and parse user medical queries
 2. **Query Rewriting**: Expand and contextualize queries using conversation history
@@ -173,8 +199,11 @@ The Medical AI Chatbot is a standalone web application built on a client-server 
 | FR-DR-03 | The system shall use MMR (Maximal Marginal Relevance) for diverse results | Medium |
 | FR-DR-04 | The system shall rerank retrieved documents using cross-encoder | Medium |
 | FR-DR-05 | The system shall return top-N documents after reranking | High |
+<<<<<<< HEAD
 | FR-DR-06 | The system shall use hybrid BM25 + Dense ensemble retrieval | High |
 | FR-DR-07 | The system shall apply metadata filtering based on query intent | Medium |
+=======
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 | FR-DR-06 | The system shall handle empty retrieval results gracefully | High |
 
 #### 3.1.4 Response Generation (FR-RG)
@@ -188,8 +217,11 @@ The Medical AI Chatbot is a standalone web application built on a client-server 
 | FR-RG-05 | The system shall include medical disclaimer for treatment questions | High |
 | FR-RG-06 | The system shall detect emergency symptoms and provide urgent guidance | High |
 | FR-RG-07 | The system shall keep responses concise (2-5 sentences or 3-5 bullets) | Medium |
+<<<<<<< HEAD
 | FR-RG-08 | The system shall automatically restructure responses to place disclaimers at the end | High |
 | FR-RG-09 | The system shall prevent meta-commentary (no "According to context" phrases) | High |
+=======
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 #### 3.1.5 Conversation Memory (FR-CM)
 
@@ -218,11 +250,18 @@ The Medical AI Chatbot is a standalone web application built on a client-server 
 
 | ID | Requirement | Target |
 |----|-------------|--------|
+<<<<<<< HEAD
 | NFR-PF-01 | Query response time (end-to-end, cached models) | < 5 seconds |
 | NFR-PF-02 | Document retrieval time | < 2 seconds |
 | NFR-PF-03 | LLM generation time | < 3 seconds |
 | NFR-PF-04 | Model preloading at startup | < 30 seconds |
 | NFR-PF-07 | Frontend timeout tolerance | 60 seconds |
+=======
+| NFR-PF-01 | Query response time (end-to-end) | < 5 seconds |
+| NFR-PF-02 | Document retrieval time | < 2 seconds |
+| NFR-PF-03 | LLM generation time | < 3 seconds |
+| NFR-PF-04 | Model preloading at startup | < 30 seconds |
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 | NFR-PF-05 | System availability | 99% uptime |
 | NFR-PF-06 | Concurrent user support | 10 simultaneous sessions |
 
@@ -265,6 +304,7 @@ The system implements the RAG pattern combining:
 2. **Augmentation Component**: Context injection into LLM prompt
 3. **Generation Component**: LLM response synthesis
 
+<<<<<<< HEAD
 ### 4.2 Component Diagram (Mermaid)
 
 ```mermaid
@@ -491,6 +531,23 @@ flowchart LR
     style AWSServices fill:#e8f5e9
     style ExternalAPIs fill:#ffebee
 ```
+=======
+### 4.2 System Architecture Figures
+
+**Figure 1. Complete RAG Pipeline Architecture**  
+![Complete RAG Pipeline Architecture](image-3.png)
+
+**Figure 2. RAG Query Workflow**  
+![RAG Query Workflow](image-2.png)
+
+**Figure 3. RAG UML Diagram**  
+![RAG Sequence Diagram](image-1.png)
+
+### 4.3 CI/CD Pipeline and Cloud Deployment
+
+**Figure 4. CI/CD Pipeline Architecture**  
+![CI/CD Pipeline Architecture](image.png)
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 **CI/CD Workflow Description:**
 
@@ -513,10 +570,21 @@ flowchart LR
 
 ```dockerfile
 FROM python:3.10-slim-buster
+<<<<<<< HEAD
 WORKDIR /app
 COPY . /app
 RUN pip install -r requirements.txt
 CMD ["python3", "app.py"]
+=======
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY . /app
+EXPOSE 5000
+CMD ["gunicorn", "--workers", "2", "--worker-class", "gthread", "--threads", "8", "--timeout", "120", "--bind", "0.0.0.0:5000", "wsgi:app"]
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 ```
 
 **Required Environment Variables (GitHub Secrets):**
@@ -685,6 +753,7 @@ CMD ["python3", "app.py"]
 
 ---
 
+<<<<<<< HEAD
 ## 6. Performance Comparison and Validation
 
 ### 6.1 RAGAS Evaluation Results (Actual)
@@ -736,6 +805,136 @@ context_recall: 0.6667
 | Response Time | ~2s | ~4s | Acceptable trade-off |
 
 ### 6.4 Optimization Techniques Applied
+=======
+## 6. Implementation Compliance and Validation Evidence
+
+### 6.1 Compliance Statement
+
+This section provides implementation evidence against the specified requirements in Section 3 and validation evidence from automated testing and runtime checks.  
+Compliance status categories:
+- **Implemented**: Requirement behavior is present in code.
+- **Validated**: Behavior is covered by automated tests and/or execution evidence.
+- **Partial**: Behavior exists but operational instrumentation or full environment validation is pending.
+
+### 6.2 Requirement-to-Implementation Compliance Matrix
+
+| Requirement ID | Requirement Summary | Implementation Evidence | Validation Evidence | Status |
+|----------------|---------------------|-------------------------|---------------------|--------|
+| FR-QP-01 | Accept text input via web interface | Flask `/get` route | Unit + route tests | Implemented + Validated |
+| FR-QP-02 | Basic XSS sanitization | Input validator rejects script-like/HTML payloads | Automated tests for unsafe input | Implemented + Validated |
+| FR-QP-03 | Reject empty input | Input validator rejects blank/whitespace | Automated test coverage | Implemented + Validated |
+| FR-QP-04 | Handle input up to 500 chars | `MAX_QUERY_LENGTH = 500` enforcement | Automated over-length test | Implemented + Validated |
+| FR-QP-05 | Detect greeting/personal questions | Greeting classifier and dedicated responses | Unit test coverage | Implemented + Validated |
+| FR-QR-01 | Rewrite query for retrieval | Query rewrite chain + normalization | Unit tests + runtime logs | Implemented + Validated |
+| FR-QR-02 | Pronoun resolution from history | Pronoun detection + topic anchoring | Unit + workflow tests | Implemented + Validated |
+| FR-QR-03 | Use most recent topic | Session `current_topic` + anchoring strategy | Multi-turn workflow tests | Implemented + Validated |
+| FR-QR-04 | Correct medical spelling | Common typo normalization list | Unit function tests | Implemented + Validated |
+| FR-DR-01..06 | Embedding + retrieval + rerank pipeline | Embeddings + MMR + cross-encoder reranker | Unit + integration-style tests | Implemented + Validated |
+| FR-RG-01 | Context-grounded response generation | RAG chain with retrieved context | Functional test evidence | Implemented + Validated |
+| FR-RG-05 | Clinical disclaimer behavior | Safety note appending logic | Unit tests | Implemented + Validated |
+| FR-RG-06 | Emergency symptom urgent guidance | Emergency keyword detection + escalation text | Unit + route tests | Implemented + Validated |
+| FR-CM-01..05 | Session memory and clear-chat | Session history + `/clear` route | Workflow tests | Implemented + Validated |
+| NFR-SC-01 | API keys in environment vars | `os.environ` loading | Configuration checks | Implemented |
+| NFR-RL-01..04 | Error handling + fallback behavior | Primary/fallback model strategy + exception handling | Test and runtime evidence | Implemented + Partial Validation |
+| NFR-PF-01..06 | Performance/availability targets | Model preloading and optimized retrieval | Needs production telemetry | Partial |
+
+### 6.3 Validation Evidence Summary
+
+**Automated test execution snapshot:**
+- `pytest -q tests/test_app.py tests/test_system_workflows.py`
+- Result: **27 passed, 2 skipped**
+
+**Validated behavior areas:**
+1. Query validation (empty, max length, unsafe payloads)
+2. Greeting routing and non-medical handling path
+3. Query rewriting and pronoun context anchoring
+4. Route-level workflow (`/get`, `/clear`, `/health`, `/response-status`)
+5. Clinical safety and emergency escalation handling
+
+### 6.4 Optimization Decisions and Design Trade-offs
+
+1. **Retrieval Quality vs Latency**
+- MMR retrieval plus cross-encoder reranking improves relevance and reduces hallucination risk.
+- Trade-off: added retrieval latency from reranking.
+
+2. **Reliability Under API Limits**
+- Primary model uses higher-capability generation; fallback model handles rate-limit events.
+- Trade-off: fallback output quality can be lower but preserves service continuity.
+
+3. **Conversation Context Control**
+- Session topic tracking is used for pronoun disambiguation only, reducing topic drift.
+- Trade-off: conservative context use may reduce recall for very long conversations.
+
+4. **Safety and User Clarity**
+- Post-processing enforces cleaner output and appends clinical guidance where needed.
+- Emergency keyword detection provides explicit urgent-care instructions.
+
+
+## 7. Performance Comparison and Validation
+
+### 7.1 Latest Evaluation Results (Report-Ready)
+
+**Evaluation Date:** May 3, 2026  
+**Evaluator:** Kinza  
+**Framework:** Custom comprehensive RAG evaluation with quota-safe mode  
+**Test Cases:** 5 medical queries sampled from the larger evaluation set  
+**Mode:** `EVAL_USE_RAGAS=false` because the Groq quota was exhausted during the run  
+
+| Metric | Score | Description | Status |
+|--------|-------|-------------|--------|
+| **Precision@1** | **0.60** | Top result relevance | Moderate |
+| **Precision@3** | **0.53** | Relevance in top 3 results | Moderate |
+| **Precision@5** | **0.50** | Relevance in top 5 results | Needs Improvement |
+| **Recall@5** | **0.67** | Coverage of relevant docs in top 5 | Moderate |
+| **MRR** | **0.70** | First relevant document rank quality | Good |
+| **NDCG@5** | **0.62** | Ranking quality with position sensitivity | Moderate |
+| **MAP@5** | **0.53** | Average precision across top 5 | Moderate |
+| **Semantic Similarity** | **0.74** | Answer similarity to ground truth | Good |
+| **BLEU** | **0.16** | N-gram overlap with ground truth | Low |
+| **ROUGE-L** | **0.15** | Longest common subsequence overlap | Low |
+| **Overall Score** | **0.43** | Combined retrieval + answer quality | Needs Improvement |
+
+**Raw Results:**
+```
+precision_at_1: 0.6000
+precision_at_5: 0.5000
+recall_at_5: 0.6667
+mrr: 0.7000
+ndcg_at_5: 0.6216
+map_at_5: 0.5333
+semantic_similarity: 0.7376
+bleu_score: 0.1604
+rouge_l_score: 0.1549
+overall_score: 0.4346
+```
+
+### 7.2 Analysis of Results
+
+**Strengths:**
+1. **MRR (0.70)**: The first relevant document is usually surfaced early
+2. **Semantic Similarity (0.74)**: Generated answers are often close to the target answer wording
+
+**Areas for Improvement:**
+1. **Precision@5 (0.50)**: Retrieved context still contains some noise
+    - *Root Cause:* Diverse retrieval plus reranking still surfaces partial matches
+    - *Recommendation:* Increase reranker selectivity or tune `lambda_mult`
+   
+2. **BLEU/ROUGE-L**: Surface-form overlap remains low
+    - *Root Cause:* Answers are paraphrased rather than copied verbatim
+    - *Recommendation:* Use stricter context grounding and shorter, more extractive answers
+
+### 7.3 Baseline Comparison
+
+| Metric | Without RAG | With RAG | Improvement |
+|--------|-------------|----------|-------------|
+| Response Accuracy | ~65% | ~74% semantic similarity | +9% |
+| Hallucination Rate | ~35% | Reduced through context grounding and safety filters | Improved |
+| Context Relevance | N/A | Precision@5 = 0.50, Recall@5 = 0.67 | Moderate |
+| Ranking Quality | N/A | MRR = 0.70, NDCG@5 = 0.62 | Good-to-moderate |
+| Response Time | ~2s | ~4s | Acceptable trade-off |
+
+### 7.4 Optimization Techniques Applied
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 1. **Model Caching**: `@lru_cache` for embedding and LLM models
 2. **Preloading**: Models loaded at startup to prevent cold-start latency
@@ -743,9 +942,21 @@ context_recall: 0.6667
 4. **Session Memory**: Prevents redundant retrievals for follow-up questions
 5. **Async Processing**: Non-blocking UI with typing indicators
 
+<<<<<<< HEAD
 ---
 
 ## 7. Appendices
+=======
+### 7.5 Deployment Readiness Notes
+
+- The application now exposes a `/health` endpoint for load balancer and container probes.
+- The Docker image runs under Gunicorn instead of the Flask development server.
+- Evaluation can be run in quota-safe mode with `EVAL_USE_RAGAS=false` to avoid hard failures when Groq daily limits are reached.
+
+---
+
+## 8. Appendices
+>>>>>>> 0f3dabdf0489b2ce5e7d2ba60cbccf4a3d92b1ce
 
 ### Appendix A: API Specifications
 

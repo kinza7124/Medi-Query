@@ -139,47 +139,63 @@
 			}
 
 			function parseMarkdownBold(text) {
-				return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+				return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+				           .replace(/\*(.*?)\*/g, '<em>$1</em>');
 			}
 
 			function renderBotMessageContent(message) {
 				const normalized = String(message || "").replace(/\r\n/g, "\n").trim();
-				if (!normalized) {
-					return "";
-				}
+				if (!normalized) return "";
 
 				const lines = normalized.split("\n");
-				const bulletLines = [];
-				const proseLines = [];
+				let html = "";
+				let inList = false;
 
-				for (const line of lines) {
+				for (let i = 0; i < lines.length; i++) {
+					const line = lines[i];
 					const trimmed = line.trim();
+
 					if (!trimmed) {
+						if (inList) { html += "</ul>"; inList = false; }
 						continue;
 					}
 
-					const bulletMatch = trimmed.match(/^(?:[-*]|\u2022)\s+(.*)$/);
-					if (bulletMatch && bulletMatch[1].trim()) {
-						bulletLines.push(bulletMatch[1].trim());
-					} else {
-						proseLines.push(trimmed);
+					// ## Section headers
+					if (trimmed.startsWith("## ")) {
+						if (inList) { html += "</ul>"; inList = false; }
+						const heading = parseMarkdownBold(escapeHtml(trimmed.slice(3).trim()));
+						html += `<h4 class="bot-section-header">${heading}</h4>`;
+						continue;
 					}
+
+					// --- separator (disclaimer divider)
+					if (trimmed === "---") {
+						if (inList) { html += "</ul>"; inList = false; }
+						html += `<hr class="bot-divider">`;
+						continue;
+					}
+
+					// Bullet points: - item or * item
+					const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/);
+					if (bulletMatch) {
+						if (!inList) { html += '<ul class="bot-list">'; inList = true; }
+						html += `<li>${parseMarkdownBold(escapeHtml(bulletMatch[1]))}</li>`;
+						continue;
+					}
+
+					// Italic disclaimer line: *text*
+					if (trimmed.startsWith("*") && trimmed.endsWith("*") && trimmed.length > 2) {
+						if (inList) { html += "</ul>"; inList = false; }
+						html += `<p class="bot-disclaimer">${parseMarkdownBold(escapeHtml(trimmed.slice(1, -1)))}</p>`;
+						continue;
+					}
+
+					// Regular paragraph
+					if (inList) { html += "</ul>"; inList = false; }
+					html += `<p class="bot-text">${parseMarkdownBold(escapeHtml(trimmed))}</p>`;
 				}
 
-				if (bulletLines.length === 0) {
-					return '<p class="bot-text">' + parseMarkdownBold(escapeHtml(normalized)).replace(/\n/g, '<br>') + '</p>';
-				}
-
-				let html = "";
-				if (proseLines.length > 0) {
-					html += '<p class="bot-text">' + parseMarkdownBold(escapeHtml(proseLines.join(" "))) + '</p>';
-				}
-
-				html += '<ul class="bot-list">';
-				for (const item of bulletLines) {
-					html += '<li>' + parseMarkdownBold(escapeHtml(item)) + '</li>';
-				}
-				html += '</ul>';
+				if (inList) html += "</ul>";
 				return html;
 			}
 

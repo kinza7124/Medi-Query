@@ -388,14 +388,39 @@ def build_per_query_retriever(query: str):
 
 # ── RAG chain helpers ──────────────────────────────────────────────────────
 
+def _clean_chunk(text: str) -> str:
+    """
+    Clean a retrieved PDF chunk before sending to the LLM.
+    Removes timestamps, UI artifacts, broken newlines, and excessive whitespace.
+    """
+    # Remove timestamps like 22:44 or 9:05
+    text = re.sub(r'\b\d{1,2}:\d{2}\b', '', text)
+    # Remove common UI artifacts from PDF extraction
+    text = re.sub(r'Type your question or message', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'Ask a medical question\.?\.?\.?', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'Evidence-based health information', '', text, flags=re.IGNORECASE)
+    # Remove page numbers like "Page 1" or standalone numbers
+    text = re.sub(r'\bPage\s+\d+\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'^\s*\d+\s*$', '', text, flags=re.MULTILINE)
+    # Collapse multiple newlines into one
+    text = re.sub(r'\n{2,}', '\n', text)
+    # Collapse multiple spaces
+    text = re.sub(r'[ \t]{2,}', ' ', text)
+    # Remove lines that are just punctuation or single characters
+    text = re.sub(r'(?m)^\s*[^\w\s]{1,3}\s*$', '', text)
+    return text.strip()
+
+
 def _format_docs(docs) -> str:
-    """Concatenate retrieved docs with section + page metadata headers."""
+    """Concatenate retrieved docs with section + page metadata headers. Cleans each chunk first."""
     parts = []
     for doc in docs:
         section = doc.metadata.get("section", "")
         page    = doc.metadata.get("page", "")
         header  = f"[Section: {section} | Page: {page}]" if section else ""
-        parts.append(f"{header}\n{doc.page_content}".strip())
+        cleaned = _clean_chunk(doc.page_content)
+        if cleaned:
+            parts.append(f"{header}\n{cleaned}".strip())
     return "\n\n---\n\n".join(parts)
 
 
@@ -974,25 +999,69 @@ def _sentence_split(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def _fix_when_to_seek_section(text: str) -> str:
+    """
+    Remove '## When to Seek Medical Attention' if it only contains a generic
+    consult/disclaimer sentence (not real emergency warning signs).
+    The disclaimer will be appended properly at the end instead.
+    """
+    lines = text.split("\n")
+    result = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Detect the "When to Seek" header
+        if re.match(r'^##\s+When to Seek', stripped, re.IGNORECASE):
+            # Collect the content of this section (until next ## or end)
+            section_lines = []
+            j = i + 1
+            while j < len(lines):
+                next_stripped = lines[j].strip()
+                if next_stripped.startswith("##") or next_stripped == "---":
+                    break
+                if next_stripped:
+                    section_lines.append(next_stripped)
+                j += 1
+
+            # Check if section only has generic disclaimer text (no real warning signs)
+            section_text = " ".join(section_lines)
+            has_real_warnings = bool(re.search(
+                r'\b(severe|sudden|emergency|911|immediately|urgent|worsening|'
+                r'chest pain|stroke|bleeding|unconscious|seizure|high fever|'
+                r'difficulty breathing|swelling|infection|abscess)\b',
+                section_text, re.IGNORECASE
+            ))
+
+            if has_real_warnings:
+                # Keep the section — it has real clinical content
+                result.append(line)
+            else:
+                # Drop the header and its generic content — disclaimer goes at end
+                i = j
+                continue
+        else:
+            result.append(line)
+        i += 1
+
+    return "\n".join(result)
+
+
 def restructure_response(answer_text: str) -> str:
     """
-    Enforce strict response structure:
-      1. Intro sentence (if present)
-      2. Bullet list / main content
-      3. [blank line]
-      4. Disclaimer / consult note
-      5. Emergency note (if present)
-
-    Works by:
-    - Splitting prose paragraphs into sentences
-    - Classifying each sentence as: content | disclaimer | emergency
-    - Reassembling in the correct order
+    Post-process LLM response:
+    1. Remove '## When to Seek' if it only contains a generic disclaimer
+    2. Extract any mid-content disclaimer sentences and move to end
+    3. Ensure emergency notes are clearly marked
     """
     if not answer_text:
         return answer_text
 
-    lines = answer_text.replace("\r\n", "\n").split("\n")
+    # Step 1: fix the "When to Seek" section
+    text = _fix_when_to_seek_section(answer_text)
 
+    lines = text.replace("\r\n", "\n").split("\n")
     content_parts: list[str] = []
     disclaimer_parts: list[str] = []
     emergency_parts: list[str] = []
@@ -1000,66 +1069,61 @@ def restructure_response(answer_text: str) -> str:
     for line in lines:
         stripped = line.strip()
         if not stripped:
-            # Preserve blank lines only within content (not after disclaimers start)
             if not disclaimer_parts and not emergency_parts:
                 content_parts.append("")
             continue
 
-        is_bullet = stripped.startswith(("- ", "• ", "* ", "· "))
+        # Section headers and bullets are always content
+        is_bullet  = stripped.startswith(("- ", "• ", "* ", "· "))
+        is_header  = stripped.startswith("##")
+        is_divider = stripped == "---"
 
-        if is_bullet:
-            # Bullets are always content — never move them
+        if is_bullet or is_header or is_divider:
             content_parts.append(line)
         else:
-            # Split prose lines into sentences and classify each
             sentences = _sentence_split(stripped)
-            pending_content: list[str] = []
+            pending: list[str] = []
+            disclaimer_mode = False
 
-            disclaimer_mode = False  # Once true, all remaining sentences are disclaimer
             for sent in sentences:
                 if _EMERGENCY_RE.search(sent):
                     emergency_parts.append(sent)
                 elif disclaimer_mode or _DISCLAIMER_RE.search(sent):
-                    # Once we hit a disclaimer, EVERYTHING after it is also disclaimer
-                    # (LLM chains disclaimer sentences together)
-                    if not disclaimer_mode and pending_content:
-                        # First disclaimer - flush prior content
-                        content_parts.append(" ".join(pending_content))
-                        pending_content = []
+                    if not disclaimer_mode and pending:
+                        content_parts.append(" ".join(pending))
+                        pending = []
                     disclaimer_mode = True
                     disclaimer_parts.append(sent)
                 else:
-                    pending_content.append(sent)
+                    pending.append(sent)
 
-            if pending_content:
-                # Re-join content sentences back into a paragraph line
-                content_parts.append(" ".join(pending_content))
+            if pending:
+                content_parts.append(" ".join(pending))
 
-    # Clean trailing blank lines from content
+    # Clean trailing blank lines
     while content_parts and not content_parts[-1].strip():
         content_parts.pop()
 
-    # Assemble final response
     sections: list[str] = []
-
     if content_parts:
         sections.append("\n".join(content_parts))
 
     if disclaimer_parts:
-        # Deduplicate and join into one clean sentence
-        seen = set()
-        unique = []
+        seen: set[str] = set()
+        unique: list[str] = []
         for d in disclaimer_parts:
             key = re.sub(r'\s+', ' ', d.lower().strip())
             if key not in seen:
                 seen.add(key)
                 unique.append(d)
-        sections.append(" ".join(unique))
+        # Format as italic disclaimer after ---
+        disclaimer_text = " ".join(unique)
+        if not disclaimer_text.startswith("*"):
+            disclaimer_text = f"*{disclaimer_text}*"
+        sections.append(f"---\n{disclaimer_text}")
 
     if emergency_parts:
-        # Emergency always last and clearly marked
-        emergency_text = " ".join(emergency_parts)
-        sections.append(f"⚠️ {emergency_text}")
+        sections.append(f"⚠️ {' '.join(emergency_parts)}")
 
     return "\n\n".join(sections)
 

@@ -1,328 +1,212 @@
-# Medical AI Chatbot: Master Technical Report (Beginner to Advanced)
+# Medical AI Chatbot: Master Technical Report
 
-This document provides a comprehensive breakdown of the Medical AI Chatbot's architecture, logic, and evaluation framework. It is designed to be accessible to beginners while providing the technical depth required by advanced developers.
+**Author:** Kinza  
+**Last Updated:** May 2026  
+**Version:** 2.0
 
----
-
-## 1. Executive Summary: The RAG Paradigm
-
-Retrieval-Augmented Generation (RAG) is the bridge between a Large Language Model's (LLM) reasoning capabilities and a private, authoritative dataset. Instead of relying on the LLM's internal (and potentially stale) knowledge, RAG forces the AI to look up facts in a curated database before answering.
-
-This implementation features:
-- **Hybrid Retrieval**: BM25 (keyword-based) + Dense (semantic) + Cross-Encoder Reranking
-- **Metadata Filtering**: Intent-based section filtering for precision
-- **Query Rewriting**: LLM-powered contextual query optimization
-- **Real-time Backend Logs**: Complete visibility into the RAG pipeline
-- **Production Optimizations**: Caching, session management, error handling
+This document provides a comprehensive breakdown of the Medical AI Chatbot's architecture, logic, and implementation. It reflects the current production codebase.
 
 ---
 
-## 2. Step 1: Data Ingestion & Chunking (The Foundation)
+## 1. Executive Summary
 
-### Beginner: Breaking it Down
-We take large PDFs (Medical Books) and cut them into smaller pieces called **Chunks**. 
-- **Chunk Size:** We use ~200 tokens for prose, ~100 tokens for structured content
-- **Chunk Overlap:** We carry the last 2 sentences into the next chunk for context preservation
+MediQuery is a Retrieval-Augmented Generation (RAG) medical chatbot that answers health questions using a verified medical knowledge base. Instead of relying on the LLM's internal knowledge, it retrieves relevant passages from indexed medical documents before generating a grounded, structured response.
 
-### Advanced: Hybrid Token-Aware Chunking Pipeline
-
-The chunking pipeline (`src/helper.py`) implements a sophisticated 9-stage process:
-
-#### Stage 1: PDF Loading with PyMuPDF (Single Parse)
-- PDFs are opened ONCE using PyMuPDF's layout-aware extraction
-- Each text block captures: font size, bold flag, page number
-- Falls back to PyPDFLoader if PyMuPDF fails
-
-#### Stage 2: Layout-Aware Heading Detection
-- **Primary**: Font size >15% larger than median → heading
-- **Secondary**: Strong regex patterns for medical headings:
-  - Numbered sections: `"1.", "1.2", "A.", "I."`
-  - ALL-CAPS lines (2-8 words)
-  - Title-Case (max 5 words, no verb suffixes like -ing, -tion)
-  - Single capitalized medical word (≥4 chars)
-
-#### Stage 3: Subsection Boundary Detection
-- Medical keywords trigger new sections: causes, symptoms, diagnosis, treatment, prevention, complications, etc.
-
-#### Stage 4: Content Classification
-- Classifies content as 'prose' or 'structured' (bullets/tables/lists)
-- Structured content gets smaller token budgets (100 tokens vs 200)
-
-#### Stage 5: NLTK Sentence Tokenization
-- Uses Punkt tokenizer for robust sentence segmentation
-- Handles medical abbreviations (Dr., mg., etc.) better than regex
-
-#### Stage 6: Token-Aware Semantic Chunking
-- **NOT character-based**: Uses tiktoken cl100k_base with BGE correction factor (1.10x)
-- Enforces both token budget AND max sentences per chunk (12)
-- Sentence-level overlap: carries last 2 sentences to next chunk
-
-#### Stage 7: Deduplication
-- MD5 fingerprint-based removal of exact duplicates
-- Boilerplate removal (page numbers, copyright, URLs)
-
-#### Stage 8: Metadata Enrichment
-Every chunk includes:
-- `source`: PDF file path
-- `page`: Page number
-- `section`: Heading name (e.g., "Symptoms", "Treatment")
-- `chunk_index`: Position within section
-- `content_type`: "prose" or "structured"
-- `token_count`: Estimated BGE token count
-
-#### Stage 9: Section Prefixing
-- Each chunk prefixed with `[Section Name]` for retrieval context
+**Key features in v2.0:**
+- Hybrid BM25 + Dense retrieval with Cross-Encoder reranking
+- Intent-based metadata filtering (symptoms / causes / treatment / etc.)
+- Query rewriting with pronoun resolution (last-exchange only)
+- Query-adaptive structured responses (only relevant sections shown)
+- Chunk cleaning before LLM context injection
+- Offline-capable (TRANSFORMERS_OFFLINE=1 for local model cache)
+- New conversation button, dark mode, responsive UI
 
 ---
 
-## 3. Step 2: Vector Embeddings (Mathematical Meaning)
+## 2. Data Ingestion & Chunking
 
-### Beginner: Translating to Numbers
-Computers don't understand words; they understand numbers. An **Embedding Model** (we use HuggingFace) turns text into a long list of numbers called a **Vector**. 
-- Words with similar meanings (e.g., "Physician" and "Doctor") end up with vectors that are "close" to each other in mathematical space.
+### Source
+- **File**: `data/Medical_book.pdf` (Gale Encyclopedia of Medicine)
+- **Total chunks indexed**: ~8,814
 
-### Advanced: BGE-Small-en-v1.5 Implementation
+### Hybrid Token-Aware Chunking Pipeline (`src/helper.py`)
 
-```python
-# src/helper.py
-class BGEEmbeddingsWrapper(HuggingFaceEmbeddings):
-    def embed_query(self, text: str) -> list:
-        prefixed = f"Represent this sentence for searching relevant passages: {text}"
-        return super().embed_query(prefixed)
-```
+| Stage | Description |
+|-------|-------------|
+| 1. PDF Loading | PyMuPDF layout-aware extraction (single `fitz.open()` per file) |
+| 2. Heading Detection | Font-size + bold flag (primary), regex patterns (secondary) |
+| 3. Subsection Boundaries | Medical keywords: causes, symptoms, diagnosis, treatment, etc. |
+| 4. Content Classification | `prose` (200 token budget) vs `structured` (100 token budget) |
+| 5. Sentence Tokenization | NLTK Punkt tokenizer (handles medical abbreviations) |
+| 6. Token-Aware Chunking | tiktoken cl100k_base + 1.10x BGE correction factor |
+| 7. Deduplication | MD5 fingerprint-based; boilerplate removal |
+| 8. Metadata Enrichment | source, page, section, chunk_index, content_type, token_count |
+| 9. Section Prefixing | `[Section Name]\n{chunk_text}` |
 
-- **Model**: `BAAI/bge-small-en-v1.5`
-- **Dimensions**: 384 (compact, fast)
+---
+
+## 3. Vector Embeddings
+
+- **Model**: `BAAI/bge-small-en-v1.5` (384-dim, retrieval-optimised)
+- **Query prefix**: `"Represent this sentence for searching relevant passages: {query}"` (query time only)
 - **Normalization**: L2 normalized for cosine similarity
-- **Query Prefix**: Added at query time only (not indexing) per BGE specification
-- **Device**: CPU (no GPU required)
+- **Device**: CPU
+- **Offline**: Loaded from local HuggingFace cache (`TRANSFORMERS_OFFLINE=1`)
 
 ---
 
-## 4. Step 3: Vector Database (Pinecone)
+## 4. Vector Database (Pinecone)
 
-### Beginner: The AI's Library
-**Pinecone** is a specialized database that stores these vectors. Traditional databases look for exact words; Pinecone looks for **intent** and **meaning**.
-
-### Advanced: Index Configuration
-
-```python
-PineconeVectorStore.from_existing_index(
-    index_name="medical-chatbot",
-    embedding=get_embeddings(),
-)
-```
-
-- **Index Name**: `medical-chatbot`
-- **Total Chunks**: ~8,845 indexed
+- **Index**: `medical-chatbot`
+- **Chunks**: ~8,814
 - **Dimension**: 384
 - **Metric**: Cosine similarity
-- **Index Type**: HNSW (Hierarchical Navigable Small World)
 
 ---
 
-## 5. Step 4: The Query Rewriter (The Optimizer)
+## 5. Query Rewriting
 
-### Beginner: Fixing your Input
-Users often use messy language (e.g., "what to eat for it?"). Our **Rewriter** (powered by Groq/Llama) looks at your chat history to figure out what "it" means and fixes your typos.
+**Model**: `llama-3.1-8b-instant` via Groq  
+**History passed**: Last 1 exchange only (2 messages) — prevents picking up old topics
 
-### Advanced: Contextual Reference Resolution
+**Process:**
+1. Greetings/personal questions → passthrough unchanged
+2. Typo correction (diabtes → diabetes, symtoms → symptoms)
+3. Pronoun resolution using ONLY the last exchange (it/this/that → most recent topic)
+4. Filler word removal
+5. Output: 3-10 word search query
 
-The rewriter uses few-shot prompting to transform conversational queries:
-
-```python
-query_rewrite_system_prompt = """
-You are a medical query optimizer. Given a chat history and user query,
-rewrite the query to be a standalone search query optimized for medical 
-document retrieval.
-
-Examples:
-- "What are the symptoms?" + "How is it treated?" → "How is [condition] treated?"
-- "Tell me about diabetes" → "Diabetes symptoms causes treatment"
-"""
-```
-
-**Process Flow:**
-1. Check for greetings/personal questions (passthrough, no rewrite)
-2. Extract entities from chat history (last 3 exchanges = 6 messages)
-3. Resolve pronouns (it → condition from context)
-4. Remove filler words
-5. Extract clean, keyword-rich query
-
-**Model**: `llama-3.1-8b-instant` (fast, lightweight via Groq)
+**Separate history formatters:**
+- `format_chat_history()` → last 6 messages (for answer generation)
+- `format_rewrite_history()` → last 2 messages, assistant truncated to 200 chars (for rewriting)
 
 ---
 
-## 6. Step 5: Dual-Stage Retrieval (Retriever + Reranker)
+## 6. Retrieval Pipeline
 
-### Beginner: Search vs. Edit
-1.  **Retriever**: Finds 15 "likely" answers from the database.
-2.  **Reranker**: A second, more precise AI (Cross-Encoder) reads all 15 and picks only the **Top 8** that truly matter.
+### Stage 1: Parallel Recall
 
-### Advanced: Hybrid Retrieval Architecture
+| Retriever | Weight | Method |
+|-----------|--------|--------|
+| BM25 | 40% | Keyword exact matching, cached at startup |
+| Dense (MMR) | 60% | Semantic search, k=10, fetch_k=20, lambda_mult=0.6 |
 
-#### Stage 1: Parallel Recall (BM25 + Dense)
-- **BM25 Retriever** (40% weight):
-  - Keyword-based exact matching
-  - Cached at startup (not rebuilt per request)
-  - Post-filtered by section metadata
-  
-- **Dense Retriever** (60% weight):
-  - MMR (Maximum Marginal Relevance) search
-  - k=10, fetch_k=20, lambda_mult=0.6
-  - Diversity-aware to avoid redundant results
+### Stage 2: Metadata Filtering (Intent Detection)
 
-#### Stage 2: Metadata Filtering (Intent Detection)
-Six intent categories detected via regex:
-
-| Intent Pattern | Sections Filtered |
-|---------------|-------------------|
-| symptoms | Symptoms, Signs, Clinical Presentation |
-| causes | Causes, Etiology, Risk Factors |
-| treatment | Treatment, Management, Therapy, Medications |
+| Query Intent | Pinecone Filter Sections |
+|---|---|
+| symptoms / signs | Symptoms, Signs, Clinical Presentation |
+| causes / etiology | Causes, Etiology, Risk Factors, Pathophysiology |
+| treatment / medication | Treatment, Management, Therapy, Medications |
 | prevention | Prevention, Prophylaxis |
-| diagnosis | Diagnosis, Tests, Investigations |
-| complications | Complications, Prognosis |
+| diagnosis / tests | Diagnosis, Tests, Investigations |
+| complications / prognosis | Complications, Prognosis, Outcomes |
+| what is / overview | Description, Overview, Definition |
 
-#### Stage 3: Cross-Encoder Reranking
+BM25 results are post-filtered in Python using the same section allowlist.
+
+### Stage 3: Cross-Encoder Reranking
+
 - **Model**: `cross-encoder/ms-marco-MiniLM-L-6-v2`
 - **Top-N**: 8 most relevant chunks
 - Runs locally on CPU
 
-#### Stage 4: Optional LLM Extraction
-- **Flag**: `ENABLE_EXTRACTOR=1` (disabled by default for speed)
-- Uses `llama-3.1-8b-instant` to extract only relevant sentences from each chunk
+### Stage 4: Chunk Cleaning (`_clean_chunk()`)
+
+Before sending to the LLM, each chunk is cleaned:
+- Remove timestamps (22:44)
+- Remove UI artifacts (page numbers, boilerplate)
+- Collapse broken newlines and extra whitespace
 
 ---
 
-## 7. Step 6: Generation (The Expert Consultant)
+## 7. Response Generation
 
-### Beginner: Writing the Answer
-The AI (Groq/Llama 3.3) takes the Top 8 chunks and writes a professional response. We use a **System Prompt** to tell it to be empathetic, professional, and to NEVER lie.
+**Model**: `llama-3.3-70b-versatile` via Groq  
+**Temperature**: 0.1
 
-### Advanced: Production-Ready RAG Chain
+### Query-Adaptive Structured Prompt (`src/prompt.py`)
 
-```python
-# Chain composition
-chain = (
-    RunnablePassthrough.assign(
-        context=RunnableLambda(_retrieve_with_filter)  # Per-request retrieval
-    )
-    | RunnableLambda(_build_prompt)                    # Dynamic prompt
-    | llm                                               # Groq LLM
-    | StrOutputParser()                                 # String output
-)
-```
+The system prompt instructs the LLM to match sections to the question type:
 
-#### System Prompt Features:
-- **Role**: Medical information assistant
-- **Constraints**: 
-  - Only use provided context
-  - Include disclaimer about professional medical advice
-  - Be empathetic and clear
-  - Use bullet points for list questions
+| Question Type | Sections Generated |
+|---|---|
+| "What is X?" | Overview only |
+| "What causes X?" | Brief intro + ## Causes |
+| "What are symptoms?" | Brief intro + ## Symptoms |
+| "How is X treated?" | Brief intro + ## Treatment + ## Lifestyle Management |
+| "How to prevent X?" | Brief intro + ## Prevention |
+| "Tell me about X" | Overview + all relevant sections from context |
 
-#### Answer Post-Processing:
-1. **Clean**: Remove boilerplate prefixes ("Based on the provided context...")
-2. **Format**: Convert to readable bullet lists for cause/symptom questions
-3. **Safety Note**: Append clinical disclaimer for medication/treatment queries
+**Disclaimer rule**: One `*italic sentence*` after `---` at the very end. Never mid-response.
 
-#### Session Memory:
-- Capped at 20 messages (10 exchanges)
-- Last 3 exchanges used for pronoun resolution
-- Stored in Flask session
+**Emergency rule**: Chest pain / stroke / severe bleeding → `⚠️ SEEK IMMEDIATE EMERGENCY CARE. Call 911 now.`
+
+### Post-Processing Pipeline (`app.py`)
+
+1. `clean_answer_text()` — strip meta-commentary prefixes
+2. `format_answer_for_readability()` — normalise bullet markers
+3. `restructure_response()` — move mid-content disclaimers to end; remove `## When to Seek Medical Attention` if it only contains a generic consult sentence
+4. `append_clinical_safety_note()` — append safety note if LLM omitted one
 
 ---
 
-## 8. Step 7: UI Features
+## 8. UI Features
 
-### New Conversation Button
-The sidebar includes a "New conversation" button that:
-- Confirms before clearing
-- Calls `/clear` endpoint to reset session
-- Restores welcome card with suggestion chips
-- Clears logs panel
+### Chat Interface (`templates/chat.html`)
 
-### Backend Logs Panel
-A toggleable panel (clipboard icon in topbar) displays:
-- Original user query
-- Rewritten query (after LLM processing)
-- Metadata filters applied
-- Number of documents retrieved
-- Document previews with section names
-- Response generation status
+- **Markdown renderer**: Parses `## Heading`, `- bullets`, `---`, `*italic*`, `**bold**` into proper HTML
+- **New conversation**: Clears session, restores welcome card, reattaches chip handlers
+- **Dark mode**: Persisted in localStorage
+- **Suggestion chips**: Pre-filled example queries
+- **Typing indicator**: Animated dots while waiting for response
+- **Error handling**: Timeout (30s) and server error messages
 
-Each log entry shows: timestamp, level (INFO/WARNING/ERROR), message
+### Styling (`static/style.css`)
 
----
-
-## 9. Step 8: Evaluation (The Metrics)
-
-We use the **Ragas** framework (powered by Groq) to scientifically measure our quality:
-
-| Metric | Description | Target |
-|--------|-------------|--------|
-| Faithfulness | Does the answer come *only* from the context? | > 0.8 |
-| Answer Relevance | Does it actually answer the user? | > 0.85 |
-| Context Precision | Did the Reranker do its job correctly? | > 0.75 |
-| Context Recall | Do we have enough info in our database? | > 0.7 |
+- Section headers (`## Heading`) → `<h4>` in brand blue with underline
+- Disclaimer (`*text*`) → small italic muted text
+- Divider (`---`) → `<hr>` separator
+- Responsive: sidebar collapses on mobile (≤820px)
+- Dark/light theme via CSS custom properties
 
 ---
 
-## 10. Production Optimizations
+## 9. Session Management
 
-### Caching Strategy
-All heavy objects cached via `@lru_cache`:
-- Embeddings (single load)
-- Pinecone vector store
-- BM25 index (built once at startup)
-- Compressor pipeline
-- LLM instances
-- RAG chain
-
-### Session Management
-- Session ID generated via UUID
-- History capped at 20 messages
-- Cookie-safe memory limits
-
-### Error Handling
-- Graceful degradation if BM25 unavailable
-- Timeout handling (30s for API calls)
-- User-friendly error messages
-- Full stack traces logged to file
-
-### Logging
-- File logging: `app.log`
-- Console output (UTF-8 safe)
-- Request-scoped logs for UI display
+- Session ID: UUID per browser session
+- History cap: 20 messages (10 exchanges)
+- Answer generation uses last 6 messages
+- Query rewriting uses last 2 messages only
 
 ---
 
-## 11. API Endpoints
+## 10. API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Serve chat UI |
-| `/get` | POST | Process user message, return response + logs |
+| `/get` | POST | Process message, return structured response |
 | `/clear` | POST | Clear session history |
+| `/health` | GET | Health check for load balancers |
 
 ---
 
-## 12. Conclusion: Production Readiness
+## 11. Running the App
 
-By combining:
-- **Pinecone** for scalable vector storage
-- **Groq** for lightning-fast LPU inference
-- **BGE** for compact, efficient embeddings
-- **LangChain** for modular RAG orchestration
-- **Ragas** for continuous quality monitoring
-- **Real-time logs** for full pipeline visibility
+```bash
+# With offline model cache (no HuggingFace network calls)
+set TRANSFORMERS_OFFLINE=1 && python app.py
 
-This system is built to scale from a prototype to a professional-grade medical assistant with complete observability.
+# Or on Linux/Mac
+TRANSFORMERS_OFFLINE=1 python app.py
+```
+
+App runs at `http://127.0.0.1:5000`
 
 ---
 
-## 13. Technology Stack Summary
+## 12. Technology Stack
 
 | Component | Technology |
 |-----------|------------|
@@ -330,9 +214,10 @@ This system is built to scale from a prototype to a professional-grade medical a
 | Frontend | HTML/CSS/JS (jQuery) |
 | Embeddings | BAAI/bge-small-en-v1.5 |
 | Vector DB | Pinecone |
-| LLM | Groq (Llama 3.3 70B) |
-| Query Rewrite | Groq (Llama 3.1 8B) |
-| Reranker | Cross-Encoder ms-marco-MiniLM-L-6-v2 |
+| LLM (answers) | Groq — Llama 3.3 70B Versatile |
+| LLM (rewrite) | Groq — Llama 3.1 8B Instant |
+| Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
 | PDF Processing | PyMuPDF + NLTK |
-| Token Counting | tiktoken |
+| Token Counting | tiktoken (cl100k_base) |
 | Evaluation | Ragas |
+| Testing | pytest + pytest-cov + pytest-mock |

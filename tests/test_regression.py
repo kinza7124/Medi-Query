@@ -273,7 +273,7 @@ class TestQueryRewriteRegression:
         
         mock_chain.return_value.invoke.return_value = "rewritten query"
         
-        result = rewrite_query_for_retrieval("what causes it", "history about diabetes")
+        result = rewrite_query_for_retrieval("tell me about clinical trials for diabetes", "history about diabetes")
         
         # Chain should be called
         mock_chain.assert_called_once()

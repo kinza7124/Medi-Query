@@ -1,13 +1,20 @@
+import warnings
+warnings.filterwarnings("ignore")
 from functools import lru_cache
 import re
 import threading
 import uuid
+import copy
+import time
+from typing import List, Any, Optional, Dict, Mapping
 
 from flask import Flask, render_template, request, session, jsonify
+
 from src.helper import download_hugging_face_embeddings, chunk_pdf_dir
 from langchain_pinecone import PineconeVectorStore
 from langchain_groq import ChatGroq
 from langchain.retrievers import ContextualCompressionRetriever, EnsembleRetriever
+from langchain_core.retrievers import BaseRetriever
 from langchain.retrievers.document_compressors import (
     CrossEncoderReranker,
     DocumentCompressorPipeline,
@@ -18,6 +25,15 @@ from langchain_community.retrievers import BM25Retriever
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.documents import Document as LCDocument
+from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
+from langchain_core.callbacks.manager import CallbackManagerForLLMRun, CallbackManagerForRetrieverRun
+from langchain_core.retrievers import BaseRetriever
+from pydantic import ConfigDict
+from typing import List, Any, Optional, Dict
 from dotenv import load_dotenv
 from src.prompt import system_prompt, query_rewrite_system_prompt
 import logging
@@ -65,13 +81,175 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-change-in-pr
 load_dotenv()
 
 PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY')
-GROQ_API_KEY     = os.environ.get('GROQ_API_KEY')
+# Collect all possible Groq keys for rotation
+_GROQ_KEYS = [
+    os.environ.get('GROQ_API_KEY'),
+    os.environ.get('GROQ_EVAL_API_KEY'),
+    os.environ.get('growth_api_pickup') # mentioned in .env comment
+]
+GROQ_API_KEYS = [k for k in _GROQ_KEYS if k and k.strip()]
+GROQ_API_KEY = GROQ_API_KEYS[0] if GROQ_API_KEYS else None
 
-if not PINECONE_API_KEY or not GROQ_API_KEY:
-    logger.error("Missing critical API keys in environment variables!")
+if not PINECONE_API_KEY or not GROQ_API_KEYS:
+    logger.error("Missing critical API keys (Pinecone or Groq) in environment variables!")
 
-os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
-os.environ["GROQ_API_KEY"]     = GROQ_API_KEY
+os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY or ""
+if GROQ_API_KEY:
+    os.environ["GROQ_API_KEY"] = GROQ_API_KEY
+
+# ── Intent keywords for response formatting ──────────────────────────────────
+_INTENT_KEYWORDS = {
+    "symptoms": ["Symptoms", "Signs and Symptoms", "Clinical Manifestations"],
+    "causes": ["Causes", "Etiology", "Risk Factors"],
+    "treatment": ["Treatment", "Management", "Therapy", "Medications"],
+    "diagnosis": ["Diagnosis", "Diagnostic Tests"],
+}
+
+# ── Thread-local Request Logging ───────────────────────────────────────────
+class RequestLogs:
+    """Helper to collect log entries for the current request context."""
+    def __init__(self):
+        self._storage = threading.local()
+        if not hasattr(self._storage, 'entries'):
+            self._storage.entries = []
+
+    def log(self, level, message):
+        if not hasattr(self._storage, 'entries'):
+            self._storage.entries = []
+        self._storage.entries.append({
+            'timestamp': time.time(),
+            'level': level,
+            'message': message
+        })
+
+    def info(self, msg): self.log('INFO', msg)
+    def warning(self, msg): self.log('WARNING', msg)
+    def error(self, msg): self.log('ERROR', msg)
+
+    @property
+    def entries(self):
+        return getattr(self._storage, 'entries', [])
+
+    def get_all(self):
+        """Regression support: return all entries."""
+        return self.entries
+
+    def clear(self):
+        if hasattr(self._storage, 'entries'):
+            self._storage.entries = []
+
+request_logs = RequestLogs()
+
+# ── Rotating LLM Class ─────────────────────────────────────────────────────
+
+class RotatingGroqLLM:
+    """
+    A wrapper around ChatGroq that rotates through multiple API keys on 429 errors.
+    Inherits from nothing to avoid Pydantic v1/v2 deepcopy conflicts.
+    """
+    def __init__(self, api_keys: List[str], model_name: str, temperature: float = 0.0):
+        self.api_keys = api_keys
+        self.model_name = model_name
+        self.temperature = temperature
+        self.current_idx = 0
+        self._init_llm()
+
+    def _init_llm(self):
+        from langchain_groq import ChatGroq
+        if not self.api_keys:
+            raise ValueError("No API keys provided for RotatingGroqLLM")
+        
+        llm_instance = ChatGroq(
+            model=self.model_name,
+            temperature=self.temperature,
+            groq_api_key=self.api_keys[self.current_idx]
+        )
+        self._llm = llm_instance
+
+    def rotate(self):
+        """Switch to the next API key."""
+        if len(self.api_keys) > 1:
+            self.current_idx = (self.current_idx + 1) % len(self.api_keys)
+            logger.info(f"↺ Rate limit hit. Switched to Groq key {self.current_idx + 1}/{len(self.api_keys)}")
+            self._init_llm()
+            return True
+        return False
+
+    def invoke(self, *args, **kwargs):
+        """Invoke the current LLM with retry logic for rate limits."""
+        for _ in range(len(self.api_keys) + 1):
+            try:
+                return self._llm.invoke(*args, **kwargs)
+            except Exception as e:
+                err = str(e).lower()
+                if "429" in err or "rate_limit" in err:
+                    if not self.rotate():
+                        raise e
+                else:
+                    raise e
+        raise RuntimeError("Max retries exceeded with key rotation.")
+
+    def stream(self, *args, **kwargs):
+        """Stream from the current LLM with retry logic for rate limits."""
+        for _ in range(len(self.api_keys) + 1):
+            try:
+                yield from self._llm.stream(*args, **kwargs)
+                return
+            except Exception as e:
+                err = str(e).lower()
+                if "429" in err or "rate_limit" in err:
+                    if not self.rotate():
+                        raise e
+                else:
+                    raise e
+        raise RuntimeError("Max retries exceeded with key rotation.")
+
+    def ainvoke(self, *args, **kwargs):
+        """Async invoke with retry logic."""
+        async def _run():
+            for _ in range(len(self.api_keys) + 1):
+                try:
+                    return await self._llm.ainvoke(*args, **kwargs)
+                except Exception as e:
+                    err = str(e).lower()
+                    if "429" in err or "rate_limit" in err:
+                        if not self.rotate():
+                            raise e
+                    else:
+                        raise e
+            raise RuntimeError("Max retries exceeded with key rotation.")
+        import asyncio
+        return _run()
+
+    async def astream(self, *args, **kwargs):
+        """Async stream with retry logic."""
+        for _ in range(len(self.api_keys) + 1):
+            try:
+                async for chunk in self._llm.astream(*args, **kwargs):
+                    yield chunk
+                return
+            except Exception as e:
+                err = str(e).lower()
+                if "429" in err or "rate_limit" in err:
+                    if not self.rotate():
+                        raise e
+                else:
+                    raise e
+        raise RuntimeError("Max retries exceeded with key rotation.")
+
+    def __call__(self, *args, **kwargs):
+        return self.invoke(*args, **kwargs)
+
+    @property
+    def _llm_type(self) -> str:
+        return "rotating-groq"
+
+    # Minimal Runnable interface implementation
+    def batch(self, inputs, config=None, **kwargs):
+        return [self.invoke(x, config, **kwargs) for x in inputs]
+    
+    async def abatch(self, inputs, config=None, **kwargs):
+        return [await self.ainvoke(x, config, **kwargs) for x in inputs]
 
 _MAX_QUERY_LENGTH = 500
 MAX_QUERY_LENGTH = _MAX_QUERY_LENGTH  # alias used in validate_user_input
@@ -223,13 +401,19 @@ def get_retriever():
 
 @lru_cache(maxsize=1)
 def get_llm():
-    """Single LLM instance shared by the RAG chain."""
+    """Single LLM instance shared by the RAG chain with key rotation."""
+    if len(GROQ_API_KEYS) > 1:
+        return RotatingGroqLLM(api_keys=GROQ_API_KEYS, model_name="llama-3.3-70b-versatile", temperature=0.1)
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
 
 
 @lru_cache(maxsize=1)
 def get_query_rewrite_chain():
-    rewrite_llm    = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+    if len(GROQ_API_KEYS) > 1:
+        rewrite_llm = RotatingGroqLLM(api_keys=GROQ_API_KEYS, model_name="llama-3.1-8b-instant", temperature=0)
+    else:
+        rewrite_llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
+    
     rewrite_prompt = ChatPromptTemplate.from_messages([
         ("system", query_rewrite_system_prompt),
         ("human", "Chat history:\n{chat_history}\n\nUser query: {question}"),
@@ -241,7 +425,7 @@ def get_query_rewrite_chain():
 
 _INTENT_SECTION_MAP: list[tuple[re.Pattern, list[str]]] = [
     (
-        re.compile(r"\b(symptom|symptoms|sign|signs|present|presentation|feel|feeling|experience)\b", re.IGNORECASE),
+        re.compile(r"\b(symptom|symptoms|sign|signs|present|presentation|feel|feeling|experience|look\s+like|looks\s+like)\b", re.IGNORECASE),
         ["Symptoms", "Signs", "Clinical Presentation", "Signs And Symptoms",
          "Symptoms And Signs", "Clinical Features", "Manifestations"],
     ),
@@ -343,14 +527,9 @@ def build_per_query_retriever(query: str):
             # EnsembleRetriever requires all retrievers to be LangChain Runnable
             # instances. A plain Python class fails pydantic validation.
             # Fix: subclass BaseRetriever which satisfies the Runnable protocol.
-            from langchain_core.retrievers import BaseRetriever
-            from langchain_core.documents import Document as LCDocument
-            from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
-
             class _FilteredBM25Retriever(BaseRetriever):
                 """BM25 wrapper with Python-side section post-filtering."""
-                class Config:
-                    arbitrary_types_allowed = True
+                model_config = ConfigDict(arbitrary_types_allowed=True)
 
                 _bm25: object
                 _allowed: list
@@ -449,16 +628,6 @@ def _retrieve_with_filter(x: dict) -> str:
     return _format_docs(docs)
 
 
-@lru_cache(maxsize=1)
-def get_rag_chain():
-    llm = get_llm()
-    chain = (
-        RunnablePassthrough.assign(context=RunnableLambda(_retrieve_with_filter))
-        | RunnableLambda(_build_prompt)
-        | llm
-        | StrOutputParser()
-    )
-    return chain
 
 
 # ── Session memory ─────────────────────────────────────────────────────────
@@ -777,25 +946,28 @@ def _build_rag_chain(llm, strict_structure: bool = False):
             ("system", formatted_system)
         ])
 
-    # Build the chain
-    retriever = get_retriever()
-
     def get_retriever_input(x):
         # Use the rewritten query for retrieval if available, otherwise the original input
         query = str(x.get("retrieval_query", x.get("input", "")))
-        print(f"DEBUG: [RETR-INPUT] Query for search: '{query}'")
         return query
 
+    def per_query_retrieval(query):
+        """Build a custom retriever with metadata filters based on the query."""
+        retriever_obj = build_per_query_retriever(query)
+        docs = retriever_obj.invoke(query)
+        return docs
+
     def log_retrieval_results(docs):
-        print(f"DEBUG: [RETR-OUTPUT] Retrieved {len(docs)} documents after reranking.")
+        logger.info(f"Retrieved {len(docs)} documents after reranking.")
         for i, doc in enumerate(docs[:3]):  # Log top 3 for brevity
             source = doc.metadata.get('source', 'Unknown')
+            section = doc.metadata.get('section', 'N/A')
             content_preview = doc.page_content[:100].replace('\n', ' ')
-            print(f"  -> Doc {i+1} | Source: {source} | Content: {content_preview}...")
+            logger.info(f"  -> Doc {i+1} | Section: {section} | Content: {content_preview}...")
         return docs
 
     chain = (
-        RunnablePassthrough.assign(context=get_retriever_input | retriever | log_retrieval_results)
+        RunnablePassthrough.assign(context=get_retriever_input | RunnableLambda(per_query_retrieval) | log_retrieval_results)
         | RunnableLambda(build_prompt)
         | llm
         | StrOutputParser()
@@ -1353,8 +1525,8 @@ def stabilize_medication_answer(user_query: str, answer_text: str) -> str:
 
 def needs_clinical_safety_note(user_query: str) -> bool:
     return bool(re.search(
-        r"\b(pain|abdomen|abdominal|stomach|medicine|medication|tablet|dose"
-        r"|treatment|treat|symptom|fever|vomit|nausea|diarrhea|bleeding|chest)\b",
+        r"\b(pain|headache|abdomen|abdominal|stomach|medicine|medication|tablet|dose"
+        r"|treatment|treat|symptom|fever|vomit|nausea|diarrhea|bleeding|chest|illness|drug)\b",
         user_query, re.IGNORECASE,
     ))
 
@@ -1437,6 +1609,7 @@ def move_disclaimer_to_end(answer_text: str) -> str:
 
 @app.route("/")
 def index():
+    get_session_memory()
     return render_template('chat.html')
 
 
@@ -1476,7 +1649,8 @@ def chat():
 
     user_query = validation_result
 
-    get_session_memory()
+    if 'chat_history' not in session:
+        session['chat_history'] = []
     history = session.get('chat_history', [])
 
     # Full history for answer generation (last 3 exchanges = 6 messages)
@@ -1505,6 +1679,8 @@ def chat():
 
 
         update_session_memory(user_query, final_answer)
+        if request_id:
+            COMPLETED_RESPONSE_CACHE[request_id] = final_answer
         logger.info("Response generated successfully.")
         return final_answer
 

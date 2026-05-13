@@ -1,0 +1,82 @@
+{
+  "evaluation_info": {
+    "num_questions": 5,
+    "model_answer": "llama-3.3-70b-versatile",
+    "model_rewrite": "llama-3.1-8b-instant",
+    "embeddings": "BAAI/bge-small-en-v1.5",
+    "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2"
+  },
+  "ragas_metrics": {
+    "faithfulness": 0.8878,
+    "answer_relevancy": 0.9233,
+    "context_precision": 0.3606,
+    "context_recall": 0.9
+  },
+  "custom_metrics": {
+    "bleu": 0.1774,
+    "rouge_l": 0.1594,
+    "token_precision": 0.2128,
+    "token_recall": 0.5038,
+    "token_f1": 0.2949,
+    "precision_at_5": 0.92,
+    "recall_at_5": 0.5397,
+    "semantic_similarity": 0.8875
+  },
+  "per_question": [
+    {
+      "question": "What are the common symptoms of acne?",
+      "bleu": 0.2857,
+      "rouge_l": 0.175,
+      "token_precision": 0.3333,
+      "token_recall": 0.5833,
+      "token_f1": 0.4242,
+      "precision_at_5": 0.8,
+      "recall_at_5": 0.75,
+      "semantic_similarity": 0.9013
+    },
+    {
+      "question": "What causes type 2 diabetes?",
+      "bleu": 0.1374,
+      "rouge_l": 0.1569,
+      "token_precision": 0.2,
+      "token_recall": 0.7143,
+      "token_f1": 0.3125,
+      "precision_at_5": 0.8,
+      "recall_at_5": 0.5238,
+      "semantic_similarity": 0.8971
+    },
+    {
+      "question": "How is hypertension treated?",
+      "bleu": 0.2055,
+      "rouge_l": 0.1765,
+      "token_precision": 0.2182,
+      "token_recall": 0.4615,
+      "token_f1": 0.2963,
+      "precision_at_5": 1.0,
+      "recall_at_5": 0.3846,
+      "semantic_similarity": 0.9036
+    },
+    {
+      "question": "What are the symptoms of asthma?",
+      "bleu": 0.1625,
+      "rouge_l": 0.1698,
+      "token_precision": 0.2,
+      "token_recall": 0.44,
+      "token_f1": 0.275,
+      "precision_at_5": 1.0,
+      "recall_at_5": 0.6,
+      "semantic_similarity": 0.8888
+    },
+    {
+      "question": "How can abdominal pain be managed?",
+      "bleu": 0.0957,
+      "rouge_l": 0.1186,
+      "token_precision": 0.1127,
+      "token_recall": 0.32,
+      "token_f1": 0.1667,
+      "precision_at_5": 1.0,
+      "recall_at_5": 0.44,
+      "semantic_similarity": 0.8465
+    }
+  ]
+}

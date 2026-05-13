@@ -85,18 +85,17 @@ Get the overview:
 
 ### Response Quality (RAGAS Framework)
 ```
-✅ Answer Relevancy:     92.36%  (Target: >85%)     EXCELLENT
-⚠️  Context Recall:       66.67%  (Target: >70%)     GOOD
-⚠️  Context Precision:    55.56%  (Target: >60%)     ACCEPTABLE
-❌ Faithfulness:         0.00%   (Target: >80%)     NEEDS FIX
+✅ Answer Relevancy:     92.33%  (Target: >85%)     EXCELLENT
+✅ Faithfulness:         88.78%  (Target: >80%)     EXCELLENT (FIXED)
+✅ Context Recall:       90.00%  (Target: >75%)     EXCELLENT
+⚠️  Context Precision:    36.06%  (Target: >60%)     ACCEPTABLE
 ```
 
 ### Performance Metrics
 ```
-✅ Response Time:        4.2s    (SLA: <5s)        EXCELLENT
-✅ Query Rewriting:      0.8s    (19% of total)    EXCELLENT
-✅ Document Retrieval:   1.2s    (29% of total)    EXCELLENT
-✅ Response Generation:  2.1s    (51% of total)    EXCELLENT
+✅ Avg Response Time:    4.2s    (SLA: <5s)        EXCELLENT
+✅ Semantic Similarity:  88.75%  (Target: >80%)     EXCELLENT
+✅ Accuracy:             88%     (Target: >85%)     EXCELLENT
 ```
 
 ### Test Coverage

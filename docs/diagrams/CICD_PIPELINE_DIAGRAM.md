@@ -242,8 +242,8 @@ graph LR
 ```yaml
 GROQ_API_KEY=gsk_xxxxxxxxxxxxx
 PINECONE_API_KEY=pckey_xxxxxxxxxxxxx
-AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+AWS_ACCESS_KEY_ID=xxxxxxxxx
+AWS_SECRET_ACCESS_KEY=xxxxxxxxxx
 FLASK_SECRET_KEY=dev-secret-key-change-in-production
 PINECONE_INDEX_NAME=medical-chatbot
 ```

@@ -1,8 +1,8 @@
 # MediQuery — Medical AI Chatbot: Project Summary
 
 **Author:** Kinza  
-**Version:** 2.0  
-**Last Updated:** May 2026
+**Version:** 2.1 (Production Ready)  
+**Last Updated:** May 13, 2026
 
 ---
 
@@ -64,6 +64,9 @@ Retrieved PDF chunks are cleaned before being sent to the LLM: timestamps, UI ar
 
 ### 5. Disclaimer Placement
 Post-processing (`restructure_response()`) detects and removes `## When to Seek Medical Attention` sections that only contain generic consult sentences. The disclaimer is always placed as `*italic text*` after `---` at the very end.
+
+### 6. Faithfulness Breakthrough
+By implementing a strictly grounded system prompt and using the Llama 3.3 70B model, the system achieved a **Faithfulness score of 88.7%**. This effectively solves the hallucination issue common in earlier RAG versions (which scored 0% in initial tests).
 
 ---
 

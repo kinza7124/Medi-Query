@@ -1,571 +1,525 @@
-import os
-import time
-import logging
-import re
+"""
+evaluate_rag.py — MediQuery RAG Evaluation
+============================================
+Single-file RAGAS + custom metrics evaluation.
+
+Metrics:
+  RAGAS (LLM-judged):
+    faithfulness, answer_relevancy, context_precision, context_recall
+
+  Custom (deterministic):
+    BLEU, ROUGE-L, Token-F1, Semantic Similarity, Precision@5, Recall@5
+
+Rate-limit handling:
+  - 60s pause between each question (answer generation)
+  - RAGAS uses max_workers=1 + exponential backoff (max_wait=120s)
+  - On 429 error: waits 65s then retries automatically
+
+Usage:
+    venv\\Scripts\\python.exe evaluate_rag.py
+    (or: set TRANSFORMERS_OFFLINE=1 && venv\\Scripts\\python.exe evaluate_rag.py)
+
+Output:
+    rag_evaluation_results.csv    — RAGAS per-question scores
+    rag_evaluation_summary.json   — All metrics averaged + per-question breakdown
+"""
+
+import os, sys, time, json, re, logging
 import numpy as np
-from collections import Counter
 from dotenv import load_dotenv
-from app import get_rag_chain, get_retriever, rewrite_query_for_retrieval, get_embeddings
-from ragas import evaluate
-from ragas.metrics import (
-    faithfulness,
-    answer_relevancy,
-    context_precision,
-    context_recall,
-)
-from ragas.llms import LangchainLLMWrapper
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from ragas.run_config import RunConfig
-from datasets import Dataset
+from typing import Any, List, Optional
 
-# Additional metrics imports
-try:
-    from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-    import nltk
-    NLTK_AVAILABLE = True
-except ImportError:
-    NLTK_AVAILABLE = False
-    print("Warning: nltk not available, BLEU score will use simple implementation")
+# LangChain/Ragas imports for the Rotating LLM
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatResult
+from langchain_core.callbacks import CallbackManagerForLLMRun
 
-from sklearn.metrics.pairwise import cosine_similarity
-
-# Load environment variables
 load_dotenv()
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 
-# ── Rate-limit configuration ────────────────────────────────────────
-# Delay (seconds) between processing each evaluation question
-DELAY_BETWEEN_QUESTIONS = 25          # Increased to stay well below 30 req/min (Groq free tier)
+# ── Rotating LLM Helper ───────────────────────────────────────────
 
-# Retry / backoff settings passed to Ragas RunConfig
-RAGAS_MAX_RETRIES = 20       # Ragas will retry on errors up to this many times
-RAGAS_MAX_WAIT = 180         # max seconds between retries (3 minutes)
-RAGAS_TIMEOUT = 300          # per-request timeout (seconds)
+class RotatingGroqLLM(BaseChatModel):
+    """
+    A wrapper around ChatGroq that rotates through multiple API keys on 429 errors.
+    Inherits from BaseChatModel to be compatible with LangChain's Runnable interface.
+    """
+    api_keys: List[str]
+    model_name: str
+    temperature: float = 0.0
+    current_idx: int = 0
 
-# Groq API Rate Limit Handling
-GROQ_RATE_LIMIT_WAIT = 180   # Wait 3 minutes when rate limit hit (daily limit reset)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._init_llm()
 
-# Dual API Key Configuration
-# GROQ_API_KEY: Primary key for app
-# GROQ_EVAL_API_KEY: Secondary key for evaluation (fallback when primary hits rate limit)
-PRIMARY_API_KEY = os.getenv("GROQ_API_KEY")
-FALLBACK_API_KEY = os.getenv("GROQ_EVAL_API_KEY") or PRIMARY_API_KEY  # Fallback to primary if not set
+    def _init_llm(self):
+        from langchain_groq import ChatGroq
+        # Use object.__setattr__ to bypass Pydantic v1 validation for private attributes
+        llm_instance = ChatGroq(
+            model=self.model_name,
+            temperature=self.temperature,
+            groq_api_key=self.api_keys[self.current_idx]
+        )
+        object.__setattr__(self, '_llm', llm_instance)
 
-# Adaptive rate limiting
-class AdaptiveRateLimiter:
-    """Tracks API calls and adjusts delays to stay within rate limits."""
-    def __init__(self, max_requests_per_minute=30, safety_margin=5):
-        self.max_requests = max_requests_per_minute - safety_margin  # 25 req/min with margin
-        self.call_times = []
-        self.current_delay = DELAY_BETWEEN_QUESTIONS
-        
-    def record_call(self):
-        """Record an API call timestamp."""
-        now = time.time()
-        self.call_times.append(now)
-        # Remove calls older than 60 seconds
-        self.call_times = [t for t in self.call_times if now - t < 60]
-        
-    def get_recommended_delay(self):
-        """Calculate recommended delay before next call."""
-        now = time.time()
-        # Clean old calls
-        self.call_times = [t for t in self.call_times if now - t < 60]
-        
-        current_rate = len(self.call_times)
-        
-        if current_rate >= self.max_requests:
-            # We're at the limit, wait until oldest call expires
-            if self.call_times:
-                wait_time = 60 - (now - self.call_times[0]) + 5  # +5s buffer
-                return max(wait_time, 30)
-        
-        # Adjust delay based on current rate
-        if current_rate > self.max_requests * 0.8:
-            self.current_delay = min(self.current_delay + 5, 60)
-        elif current_rate < self.max_requests * 0.5:
-            self.current_delay = max(self.current_delay - 2, 10)
-            
-        return self.current_delay
-    
-    def get_status(self):
-        """Get current rate limit status."""
-        now = time.time()
-        self.call_times = [t for t in self.call_times if now - t < 60]
-        return {
-            "calls_in_last_minute": len(self.call_times),
-            "max_allowed": self.max_requests,
-            "current_delay": self.current_delay,
-            "remaining_capacity": self.max_requests - len(self.call_times)
-        }
+    def rotate(self):
+        # We must use object.__setattr__ here as well
+        new_idx = (self.current_idx + 1) % len(self.api_keys)
+        object.__setattr__(self, 'current_idx', new_idx)
+        self._init_llm()
+        log.info("  ↺ Rate limit hit. Switched to Groq key %d/%d", self.current_idx + 1, len(self.api_keys))
 
-# Global rate limiter instance
-rate_limiter = AdaptiveRateLimiter()
+    def _is_rate_limit(self, e) -> bool:
+        err = str(e).lower()
+        return "429" in err or "rate_limit" in err or "too many requests" in err
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Core method used by LangChain to generate responses."""
+        for attempt in range(len(self.api_keys) * 2 + 1):
+            try:
+                # Access the private _llm via __dict__ or getattr to be safe
+                active_llm = getattr(self, '_llm')
+                return active_llm._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+            except Exception as e:
+                if self._is_rate_limit(e):
+                    self.rotate()
+                    if self.current_idx == 0:
+                        _countdown(65)
+                else:
+                    raise e
+        raise RuntimeError("Max retries exceeded with key rotation.")
+
+    @property
+    def _llm_type(self) -> str:
+        return "rotating-groq"
+
+    def __getattr__(self, name):
+        """Delegate everything else to the current ChatGroq instance."""
+        try:
+            return super().__getattr__(name)
+        except (AttributeError, TypeError):
+            active_llm = getattr(self, '_llm', None)
+            if active_llm:
+                return getattr(active_llm, name)
+            raise
+
+
+
+# ── Logging ────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("evaluation.log", encoding="utf-8"),
+    ],
+)
 log = logging.getLogger(__name__)
 
+# ── Config ─────────────────────────────────────────────────────────
+PAUSE_BETWEEN_QUESTIONS = 65   # seconds — keeps answer-gen well under 30 req/min
+RAGAS_MAX_WORKERS       = 1    # serialise all RAGAS LLM calls
+RAGAS_MAX_RETRIES       = 20
+RAGAS_MAX_WAIT          = 120  # max backoff seconds between retries
+RAGAS_TIMEOUT           = 300
 
-def wait_for_rate_limit_reset(wait_seconds=GROQ_RATE_LIMIT_WAIT):
-    """
-    Wait for Groq API rate limit to reset.
-    Called when 429 errors are encountered.
-    """
-    log.warning("[WAIT] Groq API rate limit reached. Waiting %d seconds for reset...", wait_seconds)
-    log.warning("       Daily token limit: 100,000 | Per-minute request limit: 30")
-    
-    for remaining in range(wait_seconds, 0, -10):
-        mins, secs = divmod(remaining, 60)
-        log.info("       Time remaining: %02d:%02d", mins, secs)
-        time.sleep(min(10, remaining))
-    
-    log.info("[OK] Rate limit wait complete. Resuming evaluation...")
+# ── Evaluation dataset (5 diverse medical questions) ───────────────
+EVAL_DATASET = [
+    {
+        "question":     "What are the common symptoms of acne?",
+        "ground_truth": (
+            "Common symptoms of acne include blackheads, whiteheads, pimples, "
+            "papules, pustules, nodules, and cysts. The skin may appear oily and "
+            "scarring can occur in severe cases."
+        ),
+    },
+    {
+        "question":     "What causes type 2 diabetes?",
+        "ground_truth": (
+            "Type 2 diabetes is caused by insulin resistance and relative insulin "
+            "deficiency. Risk factors include obesity, physical inactivity, poor diet, "
+            "genetic predisposition, and age."
+        ),
+    },
+    {
+        "question":     "How is hypertension treated?",
+        "ground_truth": (
+            "Hypertension is treated with lifestyle changes such as reduced sodium intake, "
+            "regular exercise, and weight loss, as well as medications including ACE "
+            "inhibitors, beta-blockers, calcium channel blockers, and diuretics."
+        ),
+    },
+    {
+        "question":     "What are the symptoms of asthma?",
+        "ground_truth": (
+            "Asthma symptoms include wheezing, shortness of breath, chest tightness, "
+            "and coughing, especially at night or early morning. Symptoms can be "
+            "triggered by allergens, exercise, or cold air."
+        ),
+    },
+    {
+        "question":     "How can abdominal pain be managed?",
+        "ground_truth": (
+            "Abdominal pain management depends on the cause. It may include medications "
+            "such as antacids or antispasmodics, dietary changes, rest, and in some "
+            "cases surgical intervention."
+        ),
+    },
+]
 
 
-def get_groq_llm_with_fallback(primary_key=FALLBACK_API_KEY, fallback_key=PRIMARY_API_KEY):
-    """
-    Create Groq LLM with primary key, fallback to secondary if rate limited.
-    
-    WHY SO MANY LLM CALLS?
-    - Ragas evaluation requires an LLM to judge answer quality
-    - Each metric (faithfulness, relevancy, etc.) needs multiple LLM calls
-    - With 3 questions and 4 metrics = ~12+ LLM calls
-    - Plus query rewriting and context retrieval = additional calls
-    - Total: ~15-20 LLM calls for full evaluation
-    """
+# ── Custom metric helpers ──────────────────────────────────────────
+
+def _tok(text: str) -> list[str]:
+    """Lowercase word tokenisation."""
+    return re.findall(r"\b[a-z]+\b", text.lower())
+
+
+def bleu_score(reference: str, hypothesis: str) -> float:
+    """Unigram BLEU with add-1 smoothing and brevity penalty."""
+    ref = _tok(reference)
+    hyp = _tok(hypothesis)
+    if not ref or not hyp:
+        return 0.0
+    ref_counts: dict[str, int] = {}
+    for t in ref:
+        ref_counts[t] = ref_counts.get(t, 0) + 1
+    clipped = sum(min(hyp.count(t), ref_counts.get(t, 0)) for t in set(hyp))
+    precision  = (clipped + 1) / (len(hyp) + 1)
+    brevity    = min(1.0, len(hyp) / max(len(ref), 1))
+    return round(brevity * precision, 4)
+
+
+def rouge_l(reference: str, hypothesis: str) -> float:
+    """ROUGE-L F1 via longest common subsequence."""
+    ref = _tok(reference)
+    hyp = _tok(hypothesis)
+    if not ref or not hyp:
+        return 0.0
+    m, n = len(ref), len(hyp)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            dp[i][j] = dp[i-1][j-1] + 1 if ref[i-1] == hyp[j-1] else max(dp[i-1][j], dp[i][j-1])
+    lcs = dp[m][n]
+    p = lcs / n if n else 0.0
+    r = lcs / m if m else 0.0
+    f = 2 * p * r / (p + r) if (p + r) else 0.0
+    return round(f, 4)
+
+
+def token_f1(reference: str, hypothesis: str) -> tuple[float, float, float]:
+    """Token-level precision, recall, F1."""
+    ref_set = set(_tok(reference))
+    hyp_set = set(_tok(hypothesis))
+    if not ref_set or not hyp_set:
+        return 0.0, 0.0, 0.0
+    common = ref_set & hyp_set
+    p = len(common) / len(hyp_set)
+    r = len(common) / len(ref_set)
+    f = 2 * p * r / (p + r) if (p + r) else 0.0
+    return round(p, 4), round(r, 4), round(f, 4)
+
+
+def precision_at_k(contexts: list[str], ground_truth: str, k: int = 5) -> float:
+    """Fraction of top-K chunks containing ≥3 ground-truth keywords."""
+    if not contexts:
+        return 0.0
+    gt_words = set(_tok(ground_truth))
+    hits = sum(
+        1 for ctx in contexts[:k]
+        if len(set(_tok(ctx)) & gt_words) >= 3
+    )
+    return round(hits / min(k, len(contexts)), 4)
+
+
+def recall_at_k(contexts: list[str], ground_truth: str, k: int = 5) -> float:
+    """Fraction of ground-truth keywords covered by top-K chunks."""
+    if not contexts:
+        return 0.0
+    gt_words = set(_tok(ground_truth))
+    if not gt_words:
+        return 0.0
+    retrieved: set[str] = set()
+    for ctx in contexts[:k]:
+        retrieved.update(_tok(ctx))
+    return round(len(gt_words & retrieved) / len(gt_words), 4)
+
+
+def semantic_similarity(answer: str, ground_truth: str, embeddings) -> float:
+    """Cosine similarity between answer and ground-truth embeddings."""
     try:
-        # Try primary key first
-        log.info("[LLM] Using primary API key for evaluation...")
-        llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
-            temperature=0,
-            groq_api_key=primary_key,
-        )
-        return llm, primary_key
+        from sklearn.metrics.pairwise import cosine_similarity as cos_sim
+        a = np.array(embeddings.embed_query(answer)).reshape(1, -1)
+        g = np.array(embeddings.embed_query(ground_truth)).reshape(1, -1)
+        return round(float(cos_sim(a, g)[0][0]), 4)
     except Exception as e:
-        if "429" in str(e) and fallback_key and fallback_key != primary_key:
-            log.info("[LLM] Primary key rate limited, switching to fallback API key...")
-            llm = ChatGroq(
-                model="llama-3.3-70b-versatile",
-                temperature=0,
-                groq_api_key=fallback_key,
-            )
-            return llm, fallback_key
+        log.warning("Semantic similarity failed: %s", e)
+        return 0.0
+
+
+# ── Rate-limit aware invoke ────────────────────────────────────────
+
+def invoke_with_retry(chain, payload: dict, max_retries: int = 5) -> str:
+    """Invoke the RAG chain. Key rotation is now handled inside the RotatingGroqLLM."""
+    try:
+        result = chain.invoke(payload)
+        return str(result).strip()
+    except Exception as e:
+        log.error("Chain invocation failed even with rotation: %s", e)
         raise
 
 
-# ── Custom Evaluation Metrics ─────────────────────────────────────
-def calculate_bleu_score(reference, hypothesis):
-    """
-    Calculate BLEU score between reference (ground truth) and hypothesis (generated answer).
-    """
-    if NLTK_AVAILABLE:
-        # Tokenize into words
-        ref_tokens = reference.lower().split()
-        hyp_tokens = hypothesis.lower().split()
-        
-        # Calculate BLEU with smoothing for short sentences
-        smoothing = SmoothingFunction().method1
-        bleu = sentence_bleu([ref_tokens], hyp_tokens, smoothing_function=smoothing)
-        return bleu
-    else:
-        # Simple fallback using token overlap
-        ref_tokens = set(reference.lower().split())
-        hyp_tokens = set(hypothesis.lower().split())
-        if not ref_tokens:
-            return 0.0
-        overlap = len(ref_tokens & hyp_tokens)
-        return overlap / len(ref_tokens)
+def _countdown(seconds: int):
+    """Print a live countdown so the user can see progress."""
+    for remaining in range(seconds, 0, -5):
+        mins, secs = divmod(remaining, 60)
+        print(f"\r  ⏳ Waiting {mins:02d}:{secs:02d} for rate limit reset...", end="", flush=True)
+        time.sleep(min(5, remaining))
+    print("\r  ✓ Resuming...                                    ")
 
 
-def calculate_precision_at_k(retrieved_contexts, relevant_info, k=5):
-    """
-    Calculate Precision@K - proportion of retrieved documents that are relevant.
-    """
-    if not retrieved_contexts or k <= 0:
-        return 0.0
-    
-    # Check how many retrieved contexts contain relevant keywords
-    relevant_keywords = set(relevant_info.lower().split())
-    retrieved_k = retrieved_contexts[:k]
-    
-    relevant_count = 0
-    for ctx in retrieved_k:
-        ctx_words = set(ctx.lower().split())
-        # If significant word overlap, consider it relevant
-        overlap = len(ctx_words & relevant_keywords)
-        if overlap >= 3:  # At least 3 keywords match
-            relevant_count += 1
-    
-    return relevant_count / len(retrieved_k) if retrieved_k else 0.0
+# ── Main ───────────────────────────────────────────────────────────
 
-
-def calculate_recall_at_k(retrieved_contexts, relevant_info, k=5):
-    """
-    Calculate Recall@K - proportion of relevant documents that are retrieved.
-    """
-    if not retrieved_contexts or not relevant_info:
-        return 0.0
-    
-    # Simulate relevant documents by checking coverage of ground truth info
-    relevant_keywords = set(relevant_info.lower().split())
-    retrieved_k = retrieved_contexts[:k]
-    
-    # Find how many relevant keywords appear in retrieved contexts
-    all_retrieved_words = set()
-    for ctx in retrieved_k:
-        all_retrieved_words.update(ctx.lower().split())
-    
-    covered_keywords = len(relevant_keywords & all_retrieved_words)
-    total_keywords = len(relevant_keywords)
-    
-    return covered_keywords / total_keywords if total_keywords > 0 else 0.0
-
-
-def calculate_f1_score(precision, recall):
-    """
-    Calculate F1 score from precision and recall.
-    """
-    if precision + recall == 0:
-        return 0.0
-    return 2 * (precision * recall) / (precision + recall)
-
-
-def calculate_semantic_similarity(answer, ground_truth, embeddings):
-    """
-    Calculate cosine similarity between answer and ground truth embeddings.
-    """
-    try:
-        answer_embedding = embeddings.embed_query(answer)
-        gt_embedding = embeddings.embed_query(ground_truth)
-        
-        # Reshape for sklearn
-        answer_embedding = np.array(answer_embedding).reshape(1, -1)
-        gt_embedding = np.array(gt_embedding).reshape(1, -1)
-        
-        similarity = cosine_similarity(answer_embedding, gt_embedding)[0][0]
-        return float(similarity)
-    except Exception as e:
-        log.warning(f"Could not calculate semantic similarity: {e}")
-        return 0.0
-
-
-def calculate_token_f1(answer, ground_truth):
-    """
-    Calculate token-level F1 score.
-    """
-    answer_tokens = set(answer.lower().split())
-    gt_tokens = set(ground_truth.lower().split())
-    
-    if not answer_tokens or not gt_tokens:
-        return 0.0
-    
-    # Calculate overlap
-    common_tokens = answer_tokens & gt_tokens
-    
-    precision = len(common_tokens) / len(answer_tokens)
-    recall = len(common_tokens) / len(gt_tokens)
-    
-    return calculate_f1_score(precision, recall)
-
-
-def calculate_exact_match(answer, ground_truth):
-    """
-    Check if answer exactly matches ground truth (case insensitive).
-    """
-    return 1.0 if answer.lower().strip() == ground_truth.lower().strip() else 0.0
-
-
-def calculate_rouge_l(answer, ground_truth):
-    """
-    Simple ROUGE-L (Longest Common Subsequence) calculation.
-    """
-    answer_tokens = answer.lower().split()
-    gt_tokens = ground_truth.lower().split()
-    
-    if not answer_tokens or not gt_tokens:
-        return 0.0
-    
-    # Find Longest Common Subsequence (LCS)
-    m, n = len(answer_tokens), len(gt_tokens)
-    lcs_matrix = [[0] * (n + 1) for _ in range(m + 1)]
-    
-    for i in range(1, m + 1):
-        for j in range(1, n + 1):
-            if answer_tokens[i-1] == gt_tokens[j-1]:
-                lcs_matrix[i][j] = lcs_matrix[i-1][j-1] + 1
-            else:
-                lcs_matrix[i][j] = max(lcs_matrix[i-1][j], lcs_matrix[i][j-1])
-    
-    lcs_length = lcs_matrix[m][n]
-    
-    # ROUGE-L F1
-    if lcs_length == 0:
-        return 0.0
-    
-    precision = lcs_length / m if m > 0 else 0.0
-    recall = lcs_length / n if n > 0 else 0.0
-    
-    return calculate_f1_score(precision, recall)
-
-
-# ── Main evaluation ────────────────────────────────────────────────
 def run_evaluation():
-    """
-    Evaluates the RAG pipeline using a sample set of medical questions.
-    Includes delays and retry logic to stay within Groq free-tier rate limits.
-    """
-    print("Starting RAG Evaluation...")
+    log.info("=" * 62)
+    log.info("  MediQuery RAG Evaluation — RAGAS + Custom Metrics")
+    log.info("  Questions: %d  |  Pause between: %ds", len(EVAL_DATASET), PAUSE_BETWEEN_QUESTIONS)
+    log.info("=" * 62)
 
-    # Sample evaluation dataset (Questions and Ground Truths)
-    # In a real scenario, you would have a much larger dataset.
-    eval_questions = [
-        {
-            "question": "What are the common symptoms of acne?",
-            "ground_truth": "Common symptoms of acne include blackheads, whiteheads, pimples, oily skin, and potential scarring."
-        },
-        {
-            "question": "How can abdominal pain be managed?",
-            "ground_truth": "Abdominal pain management depends on the cause but can include medications, dietary changes, and in some cases, surgical intervention."
-        },
-        {
-            "question": "Is alcohol consumption risky for health?",
-            "ground_truth": "Yes, alcohol consumption carries various health risks including liver disease, cardiovascular issues, and increased cancer risk."
-        }
-    ]
+    # ── Load app components ────────────────────────────────────────
+    log.info("Loading app components (models, retriever, chain)...")
+    from app import (
+        get_rag_chain,
+        get_retriever,
+        get_embeddings,
+        rewrite_query_for_retrieval,
+    )
+    from langchain_groq import ChatGroq
+    from ragas import evaluate as ragas_evaluate
+    from ragas.metrics import (
+        faithfulness,
+        answer_relevancy,
+        context_precision,
+        context_recall,
+    )
+    from ragas.llms import LangchainLLMWrapper
+    from ragas.embeddings import LangchainEmbeddingsWrapper
+    from ragas.run_config import RunConfig
+    from datasets import Dataset
 
-    results_data = {
-        "question": [],
-        "answer": [],
-        "contexts": [],
-        "ground_truth": []
-    }
+    # ── Initialize Rotating LLM ────────────────────────────────────
+    groq_key  = os.getenv("GROQ_API_KEY")
+    eval_key  = os.getenv("GROQ_EVAL_API_KEY")
 
-    chain = get_rag_chain()
-    retriever = get_retriever()
+    # Use both keys for rotation. Filter out any None values.
+    api_keys = [k for k in [groq_key, eval_key] if k]
+    if not api_keys:
+        log.error("No Groq API keys found in .env (need GROQ_API_KEY and/or GROQ_EVAL_API_KEY)")
+        sys.exit(1)
+
+    # Initialize the rotating LLM
+    rotating_llm = RotatingGroqLLM(api_keys=api_keys, model_name="llama-3.3-70b-versatile", temperature=0.1)
+
+    # Monkeypatch app.get_llm so the RAG chain uses our rotating LLM
+    import app
+    app.get_llm = lambda: rotating_llm
+
+    chain      = get_rag_chain()
+    retriever  = get_retriever()
     embeddings = get_embeddings()
 
-    for idx, item in enumerate(eval_questions):
-        print(f"\nProcessing ({idx+1}/{len(eval_questions)}): {item['question']}")
-        
-        # Check rate limit status before each question
-        status = rate_limiter.get_status()
-        log.info(f"[RATE LIMIT] Calls in last minute: {status['calls_in_last_minute']}/{status['max_allowed']}, Delay: {status['current_delay']}s")
-
-        # 1. Simulate the rewriter
-        optimized_query = rewrite_query_for_retrieval(item['question'])
-        rate_limiter.record_call()
-
-        # Adaptive delay based on current rate
-        adaptive_delay = rate_limiter.get_recommended_delay()
-        log.info(f"[RATE LIMIT] Recommended delay: {adaptive_delay}s")
-        time.sleep(adaptive_delay)
-
-        # 2. Get the answer from the chain
-        try:
-            response = chain.invoke({
-                "input": optimized_query,
-                "chat_history": "No previous conversation."
-            })
-            rate_limiter.record_call()
-        except Exception as e:
-            if "429" in str(e):
-                log.warning("[RATE LIMIT] Hit rate limit on primary key, waiting...")
-                time.sleep(60)
-                response = chain.invoke({
-                    "input": optimized_query,
-                    "chat_history": "No previous conversation."
-                })
-                rate_limiter.record_call()
-            else:
-                raise
-
-        # 3. Get the retrieved contexts explicitly for evaluation
-        docs = retriever.invoke(optimized_query)
-        contexts = [doc.page_content for doc in docs]
-
-        # 4. Compile data for Ragas
-        results_data["question"].append(item['question'])
-        results_data["answer"].append(str(response))
-        results_data["contexts"].append(contexts)
-        results_data["ground_truth"].append(item['ground_truth'])
-
-        # Wait before next question to respect rate limits
-        if idx < len(eval_questions) - 1:
-            wait_time = rate_limiter.get_recommended_delay()
-            log.info(
-                "Waiting %d s before next question to respect rate limits …",
-                wait_time,
-            )
-            time.sleep(wait_time)
-
-    # Calculate custom metrics for each question
-    print("\n--- Calculating Custom Metrics ---")
-    custom_metrics = {
-        "bleu_score": [],
-        "precision_at_3": [],
-        "recall_at_3": [],
-        "token_f1": [],
-        "exact_match": [],
-        "rouge_l": [],
-        "semantic_similarity": []
+    # ── Collect answers + contexts ─────────────────────────────────
+    log.info("\nPhase 1: Collecting answers and contexts...")
+    ragas_data: dict[str, list] = {
+        "question": [], "answer": [], "contexts": [], "ground_truth": []
     }
-    
-    for idx, item in enumerate(eval_questions):
-        answer = results_data["answer"][idx]
-        ground_truth = item["ground_truth"]
-        contexts = results_data["contexts"][idx]
-        
-        # BLEU Score
-        bleu = calculate_bleu_score(ground_truth, answer)
-        custom_metrics["bleu_score"].append(bleu)
-        
-        # Precision@3 and Recall@3
-        p_at_3 = calculate_precision_at_k(contexts, ground_truth, k=3)
-        r_at_3 = calculate_recall_at_k(contexts, ground_truth, k=3)
-        custom_metrics["precision_at_3"].append(p_at_3)
-        custom_metrics["recall_at_3"].append(r_at_3)
-        
-        # Token F1
-        token_f1 = calculate_token_f1(answer, ground_truth)
-        custom_metrics["token_f1"].append(token_f1)
-        
-        # Exact Match
-        em = calculate_exact_match(answer, ground_truth)
-        custom_metrics["exact_match"].append(em)
-        
-        # ROUGE-L
-        rouge = calculate_rouge_l(answer, ground_truth)
-        custom_metrics["rouge_l"].append(rouge)
-        
-        # Semantic Similarity (using embeddings)
-        sem_sim = calculate_semantic_similarity(answer, ground_truth, embeddings)
-        custom_metrics["semantic_similarity"].append(sem_sim)
-        
-        print(f"\nQuestion {idx+1}: {item['question'][:50]}...")
-        print(f"  BLEU Score: {bleu:.4f}")
-        print(f"  Precision@3: {p_at_3:.4f}")
-        print(f"  Recall@3: {r_at_3:.4f}")
-        print(f"  Token F1: {token_f1:.4f}")
-        print(f"  Exact Match: {em:.4f}")
-        print(f"  ROUGE-L: {rouge:.4f}")
-        print(f"  Semantic Similarity: {sem_sim:.4f}")
+    custom_rows: list[dict] = []
 
-    # Create dataset
-    dataset = Dataset.from_dict(results_data)
+    for idx, item in enumerate(EVAL_DATASET):
+        q  = item["question"]
+        gt = item["ground_truth"]
 
-    # ── Configure Groq as the evaluation LLM for Ragas ──────────────
-    from langchain_groq import ChatGroq
-    
-    # Use dual API key system with fallback
-    groq_llm, active_key = get_groq_llm_with_fallback(PRIMARY_API_KEY, FALLBACK_API_KEY)
-    
-    # Log which key is being used (mask it for security)
-    masked_key = active_key[:10] + "..." if active_key else "NOT SET"
-    log.info(f"[EVAL] Using API key: {masked_key}")
+        log.info("\n[%d/%d] %s", idx + 1, len(EVAL_DATASET), q)
 
-    # Wrap with Ragas-compatible wrappers (required by Ragas internals)
-    eval_llm = LangchainLLMWrapper(groq_llm)
-    eval_embeddings = LangchainEmbeddingsWrapper(embeddings)
+        # Rewrite
+        rewritten = rewrite_query_for_retrieval(q, "No previous conversation.")
+        log.info("  → Rewritten: %s", rewritten)
 
-    # RunConfig: max_workers=1 serialises all LLM calls so the
-    # free-tier rate limit (30 req/min) is not exceeded.
-    # max_retries + max_wait handle 429 errors automatically.
-    run_config = RunConfig(
-        max_workers=1,
+        # Generate answer (with rate-limit retry)
+        answer = invoke_with_retry(chain, {
+            "input":           q,
+            "retrieval_query": rewritten,
+            "chat_history":    "No previous conversation.",
+        })
+        log.info("  → Answer length: %d chars", len(answer))
+
+        # Retrieve contexts
+        try:
+            docs     = retriever.invoke(rewritten)
+            contexts = [doc.page_content for doc in docs]
+            log.info("  → Retrieved %d chunks", len(contexts))
+        except Exception as e:
+            log.error("  Retriever failed: %s", e)
+            contexts = []
+
+        # Custom metrics
+        bleu   = bleu_score(gt, answer)
+        rl     = rouge_l(gt, answer)
+        tp, tr, tf = token_f1(gt, answer)
+        p5     = precision_at_k(contexts, gt, k=5)
+        r5     = recall_at_k(contexts, gt, k=5)
+        sem    = semantic_similarity(answer, gt, embeddings)
+
+        log.info(
+            "  Custom → BLEU=%.3f  ROUGE-L=%.3f  Token-F1=%.3f  P@5=%.3f  R@5=%.3f  Sem=%.3f",
+            bleu, rl, tf, p5, r5, sem,
+        )
+
+        ragas_data["question"].append(q)
+        ragas_data["answer"].append(answer)
+        ragas_data["contexts"].append(contexts)
+        ragas_data["ground_truth"].append(gt)
+
+        custom_rows.append({
+            "question":            q,
+            "bleu":                bleu,
+            "rouge_l":             rl,
+            "token_precision":     tp,
+            "token_recall":        tr,
+            "token_f1":            tf,
+            "precision_at_5":      p5,
+            "recall_at_5":         r5,
+            "semantic_similarity": sem,
+        })
+
+        # Pause between questions to respect rate limits
+        if idx < len(EVAL_DATASET) - 1:
+            log.info("  Pausing %ds before next question...", PAUSE_BETWEEN_QUESTIONS)
+            _countdown(PAUSE_BETWEEN_QUESTIONS)
+
+    # ── RAGAS evaluation ──────────────────────────────────────────
+    log.info("\n" + "=" * 62)
+    log.info("Phase 2: RAGAS LLM-judged evaluation (max_workers=1)...")
+    log.info("This makes ~%d LLM calls — rate limits handled automatically.", len(EVAL_DATASET) * 4)
+    log.info("=" * 62)
+
+    dataset = Dataset.from_dict(ragas_data)
+
+    # Use the same rotating LLM for Phase 2 (RAGAS evaluation)
+    eval_llm = LangchainLLMWrapper(rotating_llm)
+    eval_emb = LangchainEmbeddingsWrapper(embeddings)
+
+    run_cfg = RunConfig(
+        max_workers=RAGAS_MAX_WORKERS,
         max_retries=RAGAS_MAX_RETRIES,
         max_wait=RAGAS_MAX_WAIT,
         timeout=RAGAS_TIMEOUT,
     )
 
-    # Note: Ragas metrics need an LLM to judge the quality.
-    # We are using Groq's high-performance Llama model for this.
-    print("\nComputing metrics using Groq and local embeddings...")
-    print("(This may take a while due to rate-limit pauses on the free tier)\n")
-    score = evaluate(
+    ragas_scores = ragas_evaluate(
         dataset,
-        metrics=[
-            faithfulness,
-            answer_relevancy,
-            context_precision,
-            context_recall,
-        ],
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=eval_llm,
-        embeddings=eval_embeddings,
-        run_config=run_config,
+        embeddings=eval_emb,
+        run_config=run_cfg,
     )
 
-    print("\n--- Evaluation Results ---")
-    print(score)
+    ragas_df = ragas_scores.to_pandas()
+    ragas_df.to_csv("rag_evaluation_results.csv", index=False)
+    log.info("RAGAS results saved → rag_evaluation_results.csv")
 
-    # Print Custom Metrics Summary
-    print("\n--- Custom Metrics Summary ---")
-    print(f"Average BLEU Score: {np.mean(custom_metrics['bleu_score']):.4f}")
-    print(f"Average Precision@3: {np.mean(custom_metrics['precision_at_3']):.4f}")
-    print(f"Average Recall@3: {np.mean(custom_metrics['recall_at_3']):.4f}")
-    print(f"Average Token F1: {np.mean(custom_metrics['token_f1']):.4f}")
-    print(f"Average Exact Match: {np.mean(custom_metrics['exact_match']):.4f}")
-    print(f"Average ROUGE-L: {np.mean(custom_metrics['rouge_l']):.4f}")
-    print(f"Average Semantic Similarity: {np.mean(custom_metrics['semantic_similarity']):.4f}")
-
-    # Save results
-    score.to_pandas().to_csv("rag_evaluation_results.csv", index=False)
-    
-    # Save custom metrics
-    import json
-    custom_metrics_summary = {
-        "per_question": {k: [float(v) for v in vals] for k, vals in custom_metrics.items()},
-        "averages": {
-            "bleu_score": float(np.mean(custom_metrics['bleu_score'])),
-            "precision_at_3": float(np.mean(custom_metrics['precision_at_3'])),
-            "recall_at_3": float(np.mean(custom_metrics['recall_at_3'])),
-            "token_f1": float(np.mean(custom_metrics['token_f1'])),
-            "exact_match": float(np.mean(custom_metrics['exact_match'])),
-            "rouge_l": float(np.mean(custom_metrics['rouge_l'])),
-            "semantic_similarity": float(np.mean(custom_metrics['semantic_similarity']))
-        }
+    # ── Compute averages ──────────────────────────────────────────
+    ragas_cols = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+    ragas_avgs = {
+        col: round(float(ragas_df[col].mean()), 4)
+        for col in ragas_cols if col in ragas_df.columns
     }
-    with open("custom_metrics_results.json", "w") as f:
-        json.dump(custom_metrics_summary, f, indent=2)
-    
-    print("\nResults saved to:")
-    print("  - rag_evaluation_results.csv (Ragas metrics)")
-    print("  - custom_metrics_results.json (Custom metrics)")
+
+    custom_keys = [
+        "bleu", "rouge_l", "token_precision", "token_recall",
+        "token_f1", "precision_at_5", "recall_at_5", "semantic_similarity",
+    ]
+    custom_avgs = {
+        k: round(float(np.mean([r[k] for r in custom_rows])), 4)
+        for k in custom_keys
+    }
+
+    # ── Print results ─────────────────────────────────────────────
+    print("\n" + "=" * 62)
+    print("  RAGAS METRICS  (LLM-judged, scale 0–1)")
+    print("=" * 62)
+    labels = {
+        "faithfulness":      "Faithfulness       (answer grounded in context?)",
+        "answer_relevancy":  "Answer Relevancy   (answers the question?)",
+        "context_precision": "Context Precision  (retrieved chunks relevant?)",
+        "context_recall":    "Context Recall     (context covers ground truth?)",
+    }
+    for k, label in labels.items():
+        val = ragas_avgs.get(k, "N/A")
+        bar = "█" * int(val * 20) if isinstance(val, float) else ""
+        print(f"  {label:<50} {val:.4f}  {bar}")
+
+    print("\n" + "=" * 62)
+    print("  CUSTOM METRICS  (deterministic, scale 0–1)")
+    print("=" * 62)
+    custom_labels = {
+        "bleu":                "BLEU Score         (n-gram overlap)",
+        "rouge_l":             "ROUGE-L            (longest common subsequence F1)",
+        "token_precision":     "Token Precision    (answer tokens in ground truth)",
+        "token_recall":        "Token Recall       (ground truth tokens in answer)",
+        "token_f1":            "Token F1           (harmonic mean of P & R)",
+        "precision_at_5":      "Precision@5        (relevant chunks in top-5)",
+        "recall_at_5":         "Recall@5           (GT keywords covered by top-5)",
+        "semantic_similarity": "Semantic Similarity(cosine via BGE embeddings)",
+    }
+    for k, label in custom_labels.items():
+        val = custom_avgs[k]
+        bar = "█" * int(val * 20)
+        print(f"  {label:<50} {val:.4f}  {bar}")
+
+    # ── Save summary JSON ─────────────────────────────────────────
+    summary = {
+        "evaluation_info": {
+            "num_questions":  len(EVAL_DATASET),
+            "model_answer":   "llama-3.3-70b-versatile",
+            "model_rewrite":  "llama-3.1-8b-instant",
+            "embeddings":     "BAAI/bge-small-en-v1.5",
+            "reranker":       "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        },
+        "ragas_metrics":  ragas_avgs,
+        "custom_metrics": custom_avgs,
+        "per_question":   custom_rows,
+    }
+
+    with open("rag_evaluation_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+
+    print("\n" + "=" * 62)
+    print("  OUTPUT FILES")
+    print("=" * 62)
+    print("  rag_evaluation_results.csv    — RAGAS per-question scores")
+    print("  rag_evaluation_summary.json   — All metrics + per-question breakdown")
+    print("=" * 62)
+
+    return summary
+
 
 if __name__ == "__main__":
     try:
         run_evaluation()
+    except KeyboardInterrupt:
+        log.info("\nEvaluation interrupted by user.")
     except Exception as e:
-        error_msg = str(e)
-        
-        # Check if it's a rate limit error
-        if "429" in error_msg or "rate_limit" in error_msg or "Too Many Requests" in error_msg:
-            log.error("[ERROR] Groq API Rate Limit Error detected!")
-            log.error("   Error: %s", error_msg[:200])
-            
-            # Extract wait time if available in error message
-            import re
-            wait_match = re.search(r'try again in (\d+)m(\d+\.?\d*)s', error_msg)
-            if wait_match:
-                mins = int(wait_match.group(1))
-                secs = float(wait_match.group(2))
-                total_wait = int(mins * 60 + secs) + 10  # Add buffer
-                log.info("   Extracted wait time from error: %d minutes %d seconds", mins, int(secs))
-            else:
-                total_wait = GROQ_RATE_LIMIT_WAIT
-            
-            # Wait for rate limit reset
-            wait_for_rate_limit_reset(total_wait)
-            
-            # Retry evaluation
-            log.info("[RETRY] Retrying evaluation after rate limit reset...")
-            try:
-                run_evaluation()
-            except Exception as retry_error:
-                log.error("[FAILED] Retry failed: %s", retry_error)
-                import traceback
-                traceback.print_exc()
-        else:
-            print(f"Evaluation failed: {e}")
-            import traceback
-            traceback.print_exc()
-            print("Note: Ensure you have your GROQ_API_KEY set up as Ragas needs an LLM for evaluation.")
+        log.error("Evaluation failed: %s", e)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

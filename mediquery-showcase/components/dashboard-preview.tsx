@@ -79,7 +79,7 @@ export function DashboardPreview() {
       >
         {/* Glow effect */}
         <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 rounded-3xl blur-2xl opacity-50" />
-        
+
         {/* VS Code Preview */}
         <div className="relative bg-[#1e1e1e] rounded-2xl overflow-hidden shadow-2xl border border-white/10">
           {/* Window controls */}
@@ -93,7 +93,7 @@ export function DashboardPreview() {
               <span className="text-xs text-gray-400 font-mono">Medical-AI-Chatbot - Visual Studio Code</span>
             </div>
           </div>
-          
+
           {/* Code content */}
           <Image
             src="/images/vscode-preview.png"
@@ -107,14 +107,14 @@ export function DashboardPreview() {
 
         {/* Decorative elements */}
         <motion.div
-          animate={{ 
+          animate={{
             rotate: [0, 360],
           }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           className="absolute -top-8 -right-8 w-16 h-16 border border-primary/20 rounded-full hidden lg:block"
         />
         <motion.div
-          animate={{ 
+          animate={{
             rotate: [360, 0],
           }}
           transition={{ duration: 25, repeat: Infinity, ease: "linear" }}

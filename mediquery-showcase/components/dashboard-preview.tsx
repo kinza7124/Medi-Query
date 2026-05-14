@@ -90,14 +90,14 @@ export function DashboardPreview() {
               <div className="w-3 h-3 rounded-full bg-[#28c840]" />
             </div>
             <div className="flex-1 text-center">
-              <span className="text-xs text-gray-400 font-mono">Medical-AI-Chatbot - Visual Studio Code</span>
+              <span className="text-xs text-gray-400 font-mono">MediQuery-Dashboard - Visual Studio Code</span>
             </div>
           </div>
 
           {/* Code content */}
           <Image
-            src="/images/vscode-preview.png"
-            alt="VS Code showing Medi-Query RAG chatbot implementation with Python and HTML code"
+            src="/images/dashboard-preview.png"
+            alt="MediQuery RAG Dashboard showing medical data analysis and chatbot performance"
             width={1160}
             height={650}
             className="w-full h-auto object-cover"
@@ -124,3 +124,4 @@ export function DashboardPreview() {
     </div>
   )
 }
+

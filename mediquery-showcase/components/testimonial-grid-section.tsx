@@ -3,58 +3,58 @@ import Image from "next/image"
 const testimonials = [
   {
     quote:
-      "The real-time code suggestions from Pointer feel like having a senior engineer reviewing every line of code as you write. The accuracy of its recommendations has improved our overall code quality, reduced review time.",
-    name: "Annette Black",
-    company: "Sony",
-    avatar: "/images/avatars/annette-black.png",
+      "MediQuery's RAG pipeline has transformed how we access clinical information. The source-grounded responses provide a level of reliability that is essential for medical assistants.",
+    name: "Dr. Sarah Chen",
+    company: "St. Jude Medical Center",
+    avatar: "/images/placeholder-user.jpg",
     type: "large-teal",
   },
   {
     quote:
-      "Integrating Pointer into our stack was smooth, and the MCP server connections saved us days of configuration work",
-    name: "Dianne Russell",
-    company: "McDonald's",
-    avatar: "/images/avatars/dianne-russell.png",
+      "The hybrid retrieval system is incredibly precise. It handles complex medical terminology better than any other AI we've tested.",
+    name: "Dr. James Wilson",
+    company: "Mayo Clinic",
+    avatar: "/images/placeholder-user.jpg",
     type: "small-dark",
   },
   {
     quote:
-      "Pointer’s multi-agent coding feature has been a game changer. We’re fixing complex bugs in hours instead of spending entire sprints on them.",
-    name: "Cameron Williamson",
-    company: "IBM",
-    avatar: "/images/avatars/cameron-williamson.png",
+      "Reducing hallucinations from 35% to 5% is a massive achievement. This is exactly what the healthcare industry needs.",
+    name: "Dr. Elena Rodriguez",
+    company: "Global Health Institute",
+    avatar: "/images/placeholder-user.jpg",
     type: "small-dark",
   },
   {
     quote:
-      "We no longer juggle multiple tools. Pointer brought all our integrations together in one place, which simplified our entire workflow.",
-    name: "Robert Fox",
-    company: "MasterCard",
-    avatar: "/images/avatars/robert-fox.png",
+      "The integration with Pinecone and Groq makes the response time blazingly fast while maintaining high accuracy.",
+    name: "Mark Thompson",
+    company: "BioTech Solutions",
+    avatar: "/images/placeholder-user.jpg",
     type: "small-dark",
   },
   {
     quote:
-      "We started with the free plan just to test it out, but within a week we upgraded to Pro. Now, we can’t imagine coding without it",
-    name: "Darlene Robertson",
-    company: "Ferrari",
-    avatar: "/images/avatars/darlene-robertson.png",
+      "As a medical researcher, I appreciate the source citations. It allows us to verify every piece of information provided.",
+    name: "Dr. Robert Fox",
+    company: "Medical University",
+    avatar: "/images/placeholder-user.jpg",
     type: "small-dark",
   },
   {
     quote:
-      "Collaborative coding feels effortless now. With Pointer’s real-time previews, pair programming has become faster and more productive.",
-    name: "Cody Fisher",
-    company: "Apple",
-    avatar: "/images/avatars/cody-fisher.png",
+      "The CI/CD pipeline on AWS ensures that we can deploy updates safely and reliably. A truly production-ready system.",
+    name: "Dr. Lisa Park",
+    company: "HealthCore Systems",
+    avatar: "/images/placeholder-user.jpg",
     type: "small-dark",
   },
   {
     quote:
-      "Deploying on Vercel with Pointer was not just simple, it felt seamless. We went from coding to seeing our changes live in minutes without worrying about build pipelines or configuration issues.",
-    name: "Albert Flores",
-    company: "Louis Vuitton",
-    avatar: "/images/avatars/albert-flores.png",
+      "Building this on Llama 3.3 70B with RAG was the right choice. The performance metrics speak for themselves. We've seen a significant improvement in clinical information retrieval across all our departments.",
+    name: "Dr. Michael Torres",
+    company: "Johns Hopkins Medicine",
+    avatar: "/images/placeholder-user.jpg",
     type: "large-light",
   },
 ]
@@ -133,11 +133,8 @@ export function TestimonialGridSection() {
       <div className="self-stretch py-6 md:py-8 lg:py-14 flex flex-col justify-center items-center gap-2">
         <div className="flex flex-col justify-start items-center gap-4">
           <h2 className="text-center text-foreground text-3xl md:text-4xl lg:text-[40px] font-semibold leading-tight md:leading-tight lg:leading-[40px]">
-            Coding made effortless
-          </h2>
-          <p className="self-stretch text-center text-muted-foreground text-sm md:text-sm lg:text-base font-medium leading-[18.20px] md:leading-relaxed lg:leading-relaxed">
-            {"Hear how developers ship products faster, collaborate seamlessly,"} <br />{" "}
-            {"and build with confidence using Pointer's powerful AI tools"}
+            Hear how medical professionals and researchers are using MediQuery
+            to get accurate, evidence-based health information.
           </p>
         </div>
       </div>

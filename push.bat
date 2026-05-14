@@ -1,0 +1,9 @@
+@echo off
+echo Staging files...
+git add .
+echo Committing changes...
+git commit -m "Add mediquery-showcase demonstration and project updates"
+echo Pushing to GitHub...
+git push origin main
+echo Done!
+pause

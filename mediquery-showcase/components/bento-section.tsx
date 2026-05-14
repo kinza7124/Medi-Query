@@ -1,22 +1,17 @@
 "use client"
 
 import { motion } from "framer-motion"
-import AiCodeReviews from "./bento/ai-code-reviews"
-import RealtimeCodingPreviews from "./bento/real-time-previews"
-import OneClickIntegrationsIllustration from "./bento/one-click-integrations-illustration"
-import MCPConnectivityIllustration from "./bento/mcp-connectivity-illustration"
-import EasyDeployment from "./bento/easy-deployment"
-import ParallelCodingAgents from "./bento/parallel-agents"
+import Image from "next/image"
 
 const BentoCard = ({
   title,
   description,
-  Component,
+  imagePath,
   index,
 }: {
   title: string
   description: string
-  Component: React.ComponentType
+  imagePath: string
   index: number
 }) => (
   <motion.div
@@ -47,8 +42,15 @@ const BentoCard = ({
         </p>
       </div>
     </div>
-    <div className="self-stretch h-72 relative -mt-0.5 z-10">
-      <Component />
+    <div className="self-stretch h-72 relative -mt-0.5 z-10 p-4">
+      <div className="relative w-full h-full rounded-xl overflow-hidden border border-white/10 shadow-2xl">
+        <Image
+          src={imagePath}
+          alt={title}
+          fill
+          className="object-cover transition-transform duration-500 group-hover:scale-110"
+        />
+      </div>
     </div>
   </motion.div>
 )
@@ -58,32 +60,32 @@ export function BentoSection() {
     {
       title: "RAG-Powered Accuracy.",
       description: "92% answer relevancy with source-grounded medical responses.",
-      Component: AiCodeReviews,
+      imagePath: "/images/ai-code-reviews.png",
     },
     {
       title: "Hybrid Retrieval Pipeline",
       description: "MMR + BM25 ensemble with cross-encoder reranking for precision.",
-      Component: RealtimeCodingPreviews,
+      imagePath: "/images/realtime-coding-previews.png",
     },
     {
       title: "AWS Cloud Deployment",
       description: "Docker containers on EC2 with GitHub Actions CI/CD pipeline.",
-      Component: OneClickIntegrationsIllustration,
+      imagePath: "/images/one-click-integrations.png",
     },
     {
       title: "Vector Search with Pinecone",
       description: "384-dim embeddings for semantic medical document retrieval.",
-      Component: MCPConnectivityIllustration,
+      imagePath: "/images/pinecone.png",
     },
     {
       title: "Llama 3.3 70B Generation",
       description: "Context-only LLM responses with 88.7% faithfulness score.",
-      Component: ParallelCodingAgents,
+      imagePath: "/images/parallel-coding-agents.png",
     },
     {
       title: "Comprehensive Testing Suite",
       description: "153 tests covering unit, integration, security, and performance.",
-      Component: EasyDeployment,
+      imagePath: "/images/deployment-easy.png",
     },
   ]
 
